@@ -120,10 +120,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Rib - `make_rib(solid: &Solid, profile: &Wire, direction: [f64; 3], thickness: f64) -> Result<Solid>`
 - [x] Groove - `make_groove(solid: &Solid, path: &Wire, profile: &Wire) -> Result<Solid>`
 - [x] Linear pattern - `linear_pattern(shape: &Solid, direction: [f64;3], count: usize, spacing: f64) -> Result<Vec<Solid>>` and `linear_pattern_fused(...)` -> Result<Solid>`
-- [ ] Circular pattern
+- [x] Circular pattern - `circular_pattern(shape: &Solid, axis_point: [f64;3], axis_dir: [f64;3], count: usize, angle: f64) -> Result<Vec<Solid>>` and `circular_pattern_fused(...) -> Result<Solid>`
 
 ### 3.9 Local Operations
-- [ ] Split face
+- [x] Split face - `split_face(face: &Face, splitting_curve: &Edge) -> Result<Vec<Face>>`
 - [ ] Split edge
 - [ ] Remove face
 - [ ] Replace face

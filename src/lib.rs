@@ -22,6 +22,7 @@ pub mod query;
 pub mod check;
 pub mod intersect;
 pub mod offset;
+pub mod local;
 
 // Re-exports for convenience
 pub use geom::{Pnt, Vec3, Dir};
@@ -35,11 +36,12 @@ pub use loft::make_loft;
 pub use fillet::{make_fillet, make_fillet_variable, RadiusLaw, InterpolationMethod};
 pub use chamfer::make_chamfer;
 pub use draft::add_draft;
-pub use feature::{make_hole, make_slot, make_rib};
+pub use feature::{make_hole, make_slot, make_rib, make_groove, circular_pattern, circular_pattern_fused};
 pub use heal::{sew_faces, fix_shape};
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
 pub use intersect::intersect_surfaces;
 pub use offset::{thick_solid, make_shell};
+pub use local::split_face;
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;

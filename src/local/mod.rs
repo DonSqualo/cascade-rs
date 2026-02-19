@@ -3,7 +3,7 @@
 //! This module provides operations that modify individual faces and edges:
 //! - **Split face**: Divides a face along a curve or edge
 
-use crate::brep::{Face, Edge, Wire, Vertex, CurveType, SurfaceType};
+use crate::brep::{Face, Edge, Wire, Vertex, SurfaceType, CurveType};
 use crate::{Result, CascadeError, TOLERANCE};
 
 /// Split a face by a curve or edge.
@@ -281,11 +281,64 @@ fn find_edge_containing_point(wire: &Wire, point: &[f64; 3]) -> Result<usize> {
         if distance(&edge.end.point, point) < TOLERANCE {
             return Ok(i);
         }
+        // Check if point lies on the edge (for straight line edges)
+        if point_on_edge(point, edge) {
+            return Ok(i);
+        }
     }
 
     Err(CascadeError::InvalidGeometry(
         format!("Point {:?} not found on any edge of the wire", point),
     ))
+}
+
+/// Check if a point lies on an edge (for straight line edges).
+fn point_on_edge(point: &[f64; 3], edge: &Edge) -> bool {
+    match edge.curve_type {
+        CurveType::Line => {
+            // Check if point is on the line segment between start and end
+            let start = &edge.start.point;
+            let end = &edge.end.point;
+
+            // Vector from start to end
+            let edge_vec = [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
+            let edge_len_sq = edge_vec[0] * edge_vec[0]
+                + edge_vec[1] * edge_vec[1]
+                + edge_vec[2] * edge_vec[2];
+
+            if edge_len_sq < TOLERANCE * TOLERANCE {
+                // Edge is degenerate, already handled by endpoint checks
+                return false;
+            }
+
+            // Vector from start to point
+            let point_vec = [point[0] - start[0], point[1] - start[1], point[2] - start[2]];
+
+            // Projection of point_vec onto edge_vec
+            let dot_prod =
+                point_vec[0] * edge_vec[0] + point_vec[1] * edge_vec[1] + point_vec[2] * edge_vec[2];
+            let t = dot_prod / edge_len_sq;
+
+            // Check if t is in [0, 1]
+            if t < 0.0 || t > 1.0 {
+                return false;
+            }
+
+            // Find closest point on edge
+            let closest = [
+                start[0] + t * edge_vec[0],
+                start[1] + t * edge_vec[1],
+                start[2] + t * edge_vec[2],
+            ];
+
+            // Check distance from point to closest point on edge
+            distance(point, &closest) < TOLERANCE
+        }
+        _ => {
+            // For non-line edges, only check endpoints
+            false
+        }
+    }
 }
 
 /// Check if a point lies on the plane (within tolerance).
@@ -311,6 +364,10 @@ fn is_point_on_wire(point: &[f64; 3], wire: &Wire) -> bool {
         if distance(&edge.start.point, point) < TOLERANCE
             || distance(&edge.end.point, point) < TOLERANCE
         {
+            return true;
+        }
+        // Also check if point lies on the edge itself
+        if point_on_edge(point, edge) {
             return true;
         }
     }
