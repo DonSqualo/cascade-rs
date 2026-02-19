@@ -125,7 +125,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 3.9 Local Operations
 - [x] Split face - `split_face(face: &Face, splitting_curve: &Edge) -> Result<Vec<Face>>`
 - [ ] Split edge
-- [ ] Remove face
+- [x] Remove face - `remove_face(solid: &Solid, face_index: usize) -> Result<Solid>`
 - [ ] Replace face
 - [ ] Thicken face
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 87 features  
-**Remaining:** 79 features  
+**Implemented:** 88 features  
+**Remaining:** 78 features  
 **Total:** 166 features  
-**Completion:** 52.4%
+**Completion:** 53.0%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
