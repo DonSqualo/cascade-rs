@@ -93,6 +93,12 @@ fn triangulate_face(
         SurfaceType::SurfaceOfLinearExtrusion { .. } => {
             triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
         }
+        SurfaceType::RectangularTrimmedSurface { .. } => {
+            triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
+        SurfaceType::OffsetSurface { .. } => {
+            triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
     }
     Ok(())
 }

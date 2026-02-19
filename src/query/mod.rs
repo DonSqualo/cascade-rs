@@ -350,6 +350,25 @@ fn calculate_face_center_and_normal(face: &Face) -> ([f64; 3], [f64; 3]) {
                 [0.0, 0.0, 1.0]
             }
         }
+        SurfaceType::RectangularTrimmedSurface { .. } | SurfaceType::OffsetSurface { .. } => {
+            // Approximate normal from vertices for trimmed/offset surfaces
+            if vertices.len() >= 3 {
+                let e1 = [vertices[1][0] - vertices[0][0], 
+                         vertices[1][1] - vertices[0][1], 
+                         vertices[1][2] - vertices[0][2]];
+                let e2 = [vertices[2][0] - vertices[0][0], 
+                         vertices[2][1] - vertices[0][1], 
+                         vertices[2][2] - vertices[0][2]];
+                
+                [
+                    e1[1] * e2[2] - e1[2] * e2[1],
+                    e1[2] * e2[0] - e1[0] * e2[2],
+                    e1[0] * e2[1] - e1[1] * e2[0],
+                ]
+            } else {
+                [0.0, 0.0, 1.0]
+            }
+        }
     };
     
     // Normalize normal vector

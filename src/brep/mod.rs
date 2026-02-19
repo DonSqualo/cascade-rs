@@ -176,6 +176,26 @@ pub enum SurfaceType {
         /// Direction vector of extrusion (will be normalized for distances)
         direction: [f64; 3],
     },
+    /// A rectangular trimmed surface - a portion of a basis surface restricted to a parameter range
+    RectangularTrimmedSurface {
+        /// The underlying basis surface being trimmed
+        basis_surface: Box<SurfaceType>,
+        /// U parameter minimum on the basis surface
+        u1: f64,
+        /// U parameter maximum on the basis surface
+        u2: f64,
+        /// V parameter minimum on the basis surface
+        v1: f64,
+        /// V parameter maximum on the basis surface
+        v2: f64,
+    },
+    /// An offset surface is a surface displaced by a constant distance along its normal
+    OffsetSurface {
+        /// The underlying basis surface being offset
+        basis_surface: Box<SurfaceType>,
+        /// The offset distance (positive = outward along normal, negative = inward)
+        offset_distance: f64,
+    },
 }
 
 impl SurfaceType {
@@ -280,6 +300,30 @@ impl SurfaceType {
                     curve_end,
                     direction,
                 )
+            }
+            SurfaceType::RectangularTrimmedSurface {
+                basis_surface,
+                u1,
+                u2,
+                v1,
+                v2,
+            } => {
+                // Map parameters from [0, 1] to [u1, u2] x [v1, v2]
+                let u_basis = u1 + u * (u2 - u1);
+                let v_basis = v1 + v * (v2 - v1);
+                basis_surface.point_at(u_basis, v_basis)
+            }
+            SurfaceType::OffsetSurface {
+                basis_surface,
+                offset_distance,
+            } => {
+                let point = basis_surface.point_at(u, v);
+                let normal = basis_surface.normal_at(u, v);
+                [
+                    point[0] + offset_distance * normal[0],
+                    point[1] + offset_distance * normal[1],
+                    point[2] + offset_distance * normal[2],
+                ]
             }
         }
     }
@@ -394,6 +438,25 @@ impl SurfaceType {
                     curve_end,
                     direction,
                 )
+            }
+            SurfaceType::RectangularTrimmedSurface {
+                basis_surface,
+                u1,
+                u2,
+                v1,
+                v2,
+            } => {
+                // Map parameters from [0, 1] to [u1, u2] x [v1, v2]
+                let u_basis = u1 + u * (u2 - u1);
+                let v_basis = v1 + v * (v2 - v1);
+                basis_surface.normal_at(u_basis, v_basis)
+            }
+            SurfaceType::OffsetSurface {
+                basis_surface,
+                offset_distance: _,
+            } => {
+                // The normal to an offset surface is the same as the normal to the basis surface
+                basis_surface.normal_at(u, v)
             }
         }
     }
