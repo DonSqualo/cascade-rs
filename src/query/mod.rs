@@ -163,15 +163,20 @@ fn calculate_shell_properties(shell: &Shell, volume: &mut f64, surface_area: &mu
         let (face_center, face_normal) = calculate_face_center_and_normal(face);
         
         // Calculate volume contribution using divergence theorem
-        // V = 1/6 * sum(face_center · face_normal * face_area)
-        let volume_contribution = (face_center[0] * face_normal[0] + 
-                                  face_center[1] * face_normal[1] + 
-                                  face_center[2] * face_normal[2]) * face_area / 6.0;
+        // V = 1/3 * sum(face_center · face_normal * face_area)
+        let dot_product = face_center[0] * face_normal[0] + 
+                         face_center[1] * face_normal[1] + 
+                         face_center[2] * face_normal[2];
+        let volume_contribution = dot_product * face_area / 3.0;
         *volume += volume_contribution;
         
-        // Center of mass contribution (weighted by face area)
+        // Center of mass contribution using weighted tetrahedra
+        // COM = 1/volume * sum of (tetrahedra_center * tetrahedra_volume)
+        // For a face at position p with normal n, the tetrahedron volume is (p·n)*area/3
+        // The tetrahedron center is at (p + origin)/4 ≈ p/4 (when origin is at 0)
+        let tetrahedra_weight = dot_product * face_area / 3.0;
         for i in 0..3 {
-            center_of_mass[i] += face_center[i] * face_area;
+            center_of_mass[i] += face_center[i] * tetrahedra_weight / 4.0;
         }
     }
 }
