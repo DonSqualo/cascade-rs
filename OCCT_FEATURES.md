@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-25 - Implemented Draft prism (tapered extrusion)*
+*Last updated: 2026-02-25 - Implemented Fuzzy boolean (tolerance-based) operations*
