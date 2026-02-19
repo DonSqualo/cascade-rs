@@ -8,7 +8,8 @@ set -e
 FEATURE_ID="$1"
 STATUS="$2"
 OWNER="DonSqualo"
-PROJECT_NUM="${CASCADE_PROJECT_NUM:-1}"  # Set via env or default
+PROJECT_NUM="1"
+PROJECT_ID="PVT_kwHOBWweZs4BPktV"
 
 if [ -z "$FEATURE_ID" ] || [ -z "$STATUS" ]; then
     echo "Usage: $0 <feature_id> <status>"
@@ -17,50 +18,44 @@ if [ -z "$FEATURE_ID" ] || [ -z "$STATUS" ]; then
     exit 1
 fi
 
-# Get project field info
-get_field_info() {
-    gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json
-}
+# Map status to option name
+case "$STATUS" in
+    backlog)     STATUS_NAME="Todo" ;;
+    in-progress) STATUS_NAME="In Progress" ;;
+    verify)      STATUS_NAME="In Review" ;;
+    done)        STATUS_NAME="Done" ;;
+    *)           echo "Unknown status: $STATUS"; exit 1 ;;
+esac
+
+echo "Updating $FEATURE_ID to $STATUS ($STATUS_NAME)..."
 
 # Get item ID by title
-get_item_id() {
-    gh project item-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
-        jq -r ".items[] | select(.content.title == \"$FEATURE_ID\") | .id"
-}
+ITEM_ID=$(gh project item-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
+    jq -r ".items[] | select(.content.title == \"$FEATURE_ID\") | .id")
 
-# Map status to option ID
-get_status_option() {
-    local status_name
-    case "$STATUS" in
-        backlog)     status_name="Todo" ;;
-        in-progress) status_name="In Progress" ;;
-        verify)      status_name="In Review" ;;  # Or custom
-        done)        status_name="Done" ;;
-        *)           echo "Unknown status: $STATUS"; exit 1 ;;
-    esac
-    
-    gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
-        jq -r ".fields[] | select(.name==\"Status\") | .options[] | select(.name==\"$status_name\") | .id"
-}
-
-echo "Updating $FEATURE_ID to $STATUS..."
-
-ITEM_ID=$(get_item_id)
 if [ -z "$ITEM_ID" ]; then
     echo "Error: Item '$FEATURE_ID' not found in project"
     exit 1
 fi
 
-STATUS_FIELD=$(gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json | jq -r '.fields[] | select(.name=="Status") | .id')
-STATUS_OPTION=$(get_status_option)
+echo "  Item ID: $ITEM_ID"
+
+# Get Status field ID and option ID
+FIELD_DATA=$(gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json)
+STATUS_FIELD=$(echo "$FIELD_DATA" | jq -r '.fields[] | select(.name=="Status") | .id')
+STATUS_OPTION=$(echo "$FIELD_DATA" | jq -r ".fields[] | select(.name==\"Status\") | .options[] | select(.name==\"$STATUS_NAME\") | .id")
 
 if [ -z "$STATUS_OPTION" ]; then
-    echo "Error: Could not find status option for '$STATUS'"
+    echo "Error: Could not find status option for '$STATUS_NAME'"
     echo "Available options:"
-    gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json | jq '.fields[] | select(.name=="Status") | .options'
+    echo "$FIELD_DATA" | jq '.fields[] | select(.name=="Status") | .options[].name'
     exit 1
 fi
 
-gh project item-edit --project-id "$PROJECT_NUM" --id "$ITEM_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$STATUS_OPTION"
+echo "  Status field: $STATUS_FIELD"
+echo "  Option ID: $STATUS_OPTION"
+
+# Update the item
+gh project item-edit --project-id "$PROJECT_ID" --id "$ITEM_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$STATUS_OPTION"
 
 echo "✓ Updated $FEATURE_ID → $STATUS"

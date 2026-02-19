@@ -265,9 +265,117 @@ pub fn make_cylinder(radius: f64, height: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement cylinder creation
+    // Approximate circular edges with 8 arc segments
+    let n_segs = 8;
+    let angle_step = 2.0 * std::f64::consts::PI / (n_segs as f64);
     
-    Err(CascadeError::NotImplemented("primitive::cylinder".into()))
+    // Create vertices for bottom circle (z=0)
+    let mut bottom_vertices = Vec::new();
+    for i in 0..n_segs {
+        let angle = angle_step * (i as f64);
+        let x = radius * angle.cos();
+        let y = radius * angle.sin();
+        bottom_vertices.push(Vertex::new(x, y, 0.0));
+    }
+    
+    // Create vertices for top circle (z=height)
+    let mut top_vertices = Vec::new();
+    for i in 0..n_segs {
+        let angle = angle_step * (i as f64);
+        let x = radius * angle.cos();
+        let y = radius * angle.sin();
+        top_vertices.push(Vertex::new(x, y, height));
+    }
+    
+    // Create arc edges for bottom circle
+    let mut bottom_edges = Vec::new();
+    for i in 0..n_segs {
+        let start = bottom_vertices[i].clone();
+        let end = bottom_vertices[(i + 1) % n_segs].clone();
+        let edge = Edge {
+            start,
+            end,
+            curve_type: CurveType::Arc {
+                center: [0.0, 0.0, 0.0],
+                radius,
+            },
+        };
+        bottom_edges.push(edge);
+    }
+    
+    // Create arc edges for top circle
+    let mut top_edges = Vec::new();
+    for i in 0..n_segs {
+        let start = top_vertices[i].clone();
+        let end = top_vertices[(i + 1) % n_segs].clone();
+        let edge = Edge {
+            start,
+            end,
+            curve_type: CurveType::Arc {
+                center: [0.0, 0.0, height],
+                radius,
+            },
+        };
+        top_edges.push(edge);
+    }
+    
+    // Create wires for the circular boundaries
+    let bottom_wire = Wire {
+        edges: bottom_edges.clone(),
+        closed: true,
+    };
+    
+    let top_wire = Wire {
+        edges: top_edges,
+        closed: true,
+    };
+    
+    // Create bottom planar face (z=0, normal pointing down)
+    let bottom_face = Face {
+        outer_wire: bottom_wire.clone(),
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+        },
+    };
+    
+    // Create top planar face (z=height, normal pointing up)
+    let top_face = Face {
+        outer_wire: top_wire.clone(),
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, height],
+            normal: [0.0, 0.0, 1.0],
+        },
+    };
+    
+    // Create cylindrical side face
+    // The outer wire is the bottom circle, inner wire is the top circle
+    // This represents a cylindrical surface bounded by those two circles
+    let side_face = Face {
+        outer_wire: bottom_wire,
+        inner_wires: vec![top_wire],
+        surface_type: SurfaceType::Cylinder {
+            origin: [0.0, 0.0, 0.0],
+            axis: [0.0, 0.0, 1.0],
+            radius,
+        },
+    };
+    
+    // Create closed shell with 3 faces (bottom cap + top cap + cylindrical side)
+    let shell = Shell {
+        faces: vec![bottom_face, top_face, side_face],
+        closed: true,
+    };
+    
+    // Create solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 /// Create a cone solid
