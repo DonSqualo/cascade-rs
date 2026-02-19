@@ -14,9 +14,10 @@ path = "src/lib.rs"
 name = "validate-features"
 path = "src/bin/validate_features.rs"
 
-[[bin]]
-name = "generate-corpus"
-path = "src/bin/generate_corpus.rs"
+# Corpus generation is done via Python script (scripts/generate_corpus.py)
+# [[bin]]
+# name = "generate-corpus"
+# path = "src/bin/generate_corpus.rs"
 
 [dependencies]
 nalgebra = "0.32"
@@ -39,6 +40,7 @@ criterion = "0.5"
 default = []
 generate-corpus = []  # Enable to build corpus generator with OCCT
 
-[[bench]]
-name = "boolean_ops"
-harness = false
+# Benchmarks (uncomment when implementing)
+# [[bench]]
+# name = "boolean_ops"
+# harness = false
