@@ -12,19 +12,19 @@ use std::fs;
 enum StepEntity {
     CartesianPoint { coords: [f64; 3] },
     Direction { ratios: [f64; 3] },
-    Axis2Placement3D { location_id: usize, axis_id: usize, ref_dir_id: usize },
+    Axis2Placement3D { location: [f64; 3], axis: [f64; 3], ref_direction: [f64; 3] },
     VertexPoint { point_id: usize },
-    Line { start_id: usize, dir_id: usize },
-    Circle { center_id: usize, radius: f64, axis_id: usize },
+    Line { start: [f64; 3], direction: [f64; 3] },
+    Circle { center: [f64; 3], radius: f64, axis: [f64; 3] },
     EdgeCurve { start_id: usize, end_id: usize, curve_id: usize },
     OrientedEdge { edge_id: usize },
     EdgeLoop { edge_ids: Vec<usize> },
     FaceBound { loop_id: usize },
     FaceOuterBound { loop_id: usize },
     AdvancedFace { bounds: Vec<usize>, surface_id: usize },
-    Plane { location_id: usize, normal_id: usize },
-    Cylinder { location_id: usize, axis_id: usize, radius: f64 },
-    Sphere { center_id: usize, radius: f64 },
+    Plane { location: [f64; 3], normal: [f64; 3] },
+    Cylinder { location: [f64; 3], axis: [f64; 3], radius: f64 },
+    Sphere { center: [f64; 3], radius: f64 },
     ClosedShell { face_ids: Vec<usize> },
     ManifoldSolidBrep { shell_id: usize },
 }
@@ -58,17 +58,18 @@ impl StepParser {
     }
     
     fn finalize(&mut self) -> Result<()> {
-        // Second pass: extract all CARTESIAN_POINT coordinates first
-        for (id, raw) in self.raw_entities.iter() {
-            if raw.trim().starts_with("CARTESIAN_POINT") {
-                if let Some(paren_idx) = raw.find('(') {
-                    let args_end = raw.rfind(')')
-                        .ok_or_else(|| CascadeError::InvalidGeometry("Missing closing paren".into()))?;
-                    let args_str = &raw[paren_idx + 1..args_end];
-                    let args_to_parse = self.skip_name_and_parse_args(args_str);
-                    let coords = self.parse_coords(&args_to_parse)?;
-                    self.points.insert(*id, coords);
-                }
+        // Second pass: parse all other entities now that points are available
+        let raw_copy: Vec<(usize, String)> = self.raw_entities.iter().map(|(k, v)| (*k, v.clone())).collect();
+        
+        for (id, raw) in raw_copy.iter() {
+            let entity_type_name = raw.split('(').next().unwrap_or("").trim();
+            // Skip entities that were already parsed
+            if entity_type_name == "CARTESIAN_POINT" || entity_type_name == "DIRECTION" {
+                continue;
+            }
+            
+            if let Ok(entity) = self.parse_entity(&raw, *id) {
+                self.entities.insert(*id, entity);
             }
         }
         Ok(())
@@ -136,9 +137,14 @@ impl StepParser {
         // Store raw entity for deferred parsing
         self.raw_entities.insert(id, entity_str.to_string());
         
-        // Parse entity
-        let entity = self.parse_entity(entity_str, id)?;
-        self.entities.insert(id, entity);
+        // First pass: only parse CARTESIAN_POINT, DIRECTION immediately
+        // Other entities will be parsed in finalize() after points are available
+        let entity_type_name = entity_str.split('(').next().unwrap_or("").trim();
+        if entity_type_name == "CARTESIAN_POINT" || entity_type_name == "DIRECTION" {
+            if let Ok(entity) = self.parse_entity(entity_str, id) {
+                self.entities.insert(id, entity);
+            }
+        }
         
         Ok(())
     }
