@@ -16,8 +16,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 2.1 Geometry - Points & Vectors
 - [x] gp_Pnt (3D point)
 - [x] gp_Vec (3D vector)
-- [ ] gp_Pnt2d (2D point)
-- [ ] gp_Vec2d (2D vector)
+- [x] gp_Pnt2d (2D point)
+- [x] gp_Vec2d (2D vector)
 - [x] gp_Dir (unit vector)
 - [ ] gp_XYZ (coordinates)
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 78 features  
-**Remaining:** 88 features  
+**Implemented:** 80 features  
+**Remaining:** 86 features  
 **Total:** 166 features  
-**Completion:** 47%
+**Completion:** 48%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-19 - Added BezierSurface, SurfaceOfLinearExtrusion, OffsetCurve, Hyperbola*
+*Last updated: 2026-02-20 - Added gp_Pnt2d (2D point) and gp_Vec2d (2D vector)*

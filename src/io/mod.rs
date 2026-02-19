@@ -514,6 +514,52 @@ impl<W: Write> StepWriter<W> {
                 
                 plane_id
             }
+            SurfaceType::RectangularTrimmedSurface { .. } => {
+                // Fallback to plane for rectangular trimmed surfaces
+                let plane_id = self.next_id();
+                let origin_id = self.next_id();
+                let normal_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+                    origin_id
+                );
+                self.entities.push(origin_entity);
+                
+                let normal_entity = format!(
+                    "#{} = DIRECTION('', (0.0, 0.0, 1.0));",
+                    normal_id
+                );
+                self.entities.push(normal_entity);
+                
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", plane_id, origin_id, normal_id);
+                self.entities.push(plane_entity);
+                
+                plane_id
+            }
+            SurfaceType::OffsetSurface { .. } => {
+                // Fallback to plane for offset surfaces
+                let plane_id = self.next_id();
+                let origin_id = self.next_id();
+                let normal_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+                    origin_id
+                );
+                self.entities.push(origin_entity);
+                
+                let normal_entity = format!(
+                    "#{} = DIRECTION('', (0.0, 0.0, 1.0));",
+                    normal_id
+                );
+                self.entities.push(normal_entity);
+                
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", plane_id, origin_id, normal_id);
+                self.entities.push(plane_entity);
+                
+                plane_id
+            }
         };
         
         // Create face
