@@ -1,12 +1,14 @@
 //! File I/O for CAD formats
 
 mod step;
+mod iges;
 
 use crate::brep::{Shape, Solid, Shell, Face, Wire, Edge, Vertex, CurveType, SurfaceType, Compound};
 use crate::{Result, CascadeError};
 use std::io::Write;
 
 pub use step::read_step;
+pub use iges::{read_iges, write_iges};
 
 pub fn write_step(shape: &Shape, path: &str) -> Result<()> {
     let file = std::fs::File::create(path)?;

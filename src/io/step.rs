@@ -377,11 +377,11 @@ impl StepParser {
                 },
                 "MANIFOLD_SOLID_BREP" => {
                     let parts = self.parse_list(&args_to_parse)?;
-                    let shell_id = if parts.len() > 0 {
-                        self.resolve_id(&parts[0])?
-                    } else {
-                        0
-                    };
+                    // Find the shell reference (skip empty name at parts[0])
+                    let shell_id = parts.iter()
+                        .find(|p| p.starts_with('#'))
+                        .map(|p| self.resolve_id(p))
+                        .unwrap_or(Ok(0))?;
                     StepEntity::ManifoldSolidBrep { shell_id }
                 },
                 _ => {

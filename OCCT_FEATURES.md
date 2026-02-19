@@ -189,8 +189,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] STEP with PMI (annotations)
 
 ### 5.2 IGES
-- [ ] IGES read
-- [ ] IGES write
+- [x] IGES read (basic geometry support: points, lines, circles, spheres, cylinders, cones, tori, planes, B-splines)
+- [x] IGES write (basic geometry support: points, lines, circles, spheres, cylinders)
 - [ ] IGES with layers
 - [ ] IGES with colors
 
