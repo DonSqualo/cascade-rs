@@ -107,7 +107,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Offset surface
 - [ ] Offset curve
 - [ ] Thick solid
-- [ ] Shell (hollow solid)
+- [x] Shell (hollow solid)
 
 ### 3.7 Draft & Taper
 - [ ] Draft angle

@@ -104,7 +104,7 @@ pub fn make_prism(profile: &Face, direction: &[f64; 3], distance: f64) -> Result
     
     let shell = Shell { faces };
     Ok(Solid {
-        shell,
+        outer_shell: shell,
         inner_shells: vec![],
     })
 }
@@ -212,7 +212,7 @@ pub fn make_pipe(profile: &Face, path: &Wire) -> Result<Solid> {
     
     let shell = Shell { faces: all_faces };
     Ok(Solid {
-        shell,
+        outer_shell: shell,
         inner_shells: vec![],
     })
 }
@@ -624,7 +624,7 @@ pub fn make_revol(
     
     let shell = Shell { faces: all_faces };
     Ok(Solid {
-        shell,
+        outer_shell: shell,
         inner_shells: vec![],
     })
 }

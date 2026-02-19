@@ -103,22 +103,22 @@ fn test_bspline_surface_in_face() {
             Edge {
                 start: Vertex::new(0.0, 0.0, 0.0),
                 end: Vertex::new(2.0, 0.0, 0.0),
-                curve_type: cascade_rs::brep::CurveType::Line,
+                curve_type: cascade::brep::CurveType::Line,
             },
             Edge {
                 start: Vertex::new(2.0, 0.0, 0.0),
                 end: Vertex::new(2.0, 2.0, 0.0),
-                curve_type: cascade_rs::brep::CurveType::Line,
+                curve_type: cascade::brep::CurveType::Line,
             },
             Edge {
                 start: Vertex::new(2.0, 2.0, 0.0),
                 end: Vertex::new(0.0, 2.0, 0.0),
-                curve_type: cascade_rs::brep::CurveType::Line,
+                curve_type: cascade::brep::CurveType::Line,
             },
             Edge {
                 start: Vertex::new(0.0, 2.0, 0.0),
                 end: Vertex::new(0.0, 0.0, 0.0),
-                curve_type: cascade_rs::brep::CurveType::Line,
+                curve_type: cascade::brep::CurveType::Line,
             },
         ],
         closed: true,

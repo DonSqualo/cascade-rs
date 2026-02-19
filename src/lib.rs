@@ -12,6 +12,7 @@ pub mod fillet;
 pub mod mesh;
 pub mod io;
 pub mod query;
+pub mod check;
 
 // Re-exports for convenience
 pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
@@ -19,6 +20,7 @@ pub use brep::topology;
 pub use primitive::{make_box, make_sphere, make_cylinder, make_cone, make_torus};
 pub use boolean::{fuse, cut, common};
 pub use fillet::make_fillet;
+pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;
