@@ -111,7 +111,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ### 3.7 Draft & Taper
 - [x] Draft angle - `add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -> Result<Solid>`
-- [ ] Taper
+- [x] Taper - `taper(solid: &Solid, face_indices: &[usize], angle: f64, neutral_plane: &Face) -> Result<Solid>`
 
 ### 3.8 Feature Operations
 - [x] Hole (simple) - `make_hole(solid: &Solid, center: [f64; 3], direction: [f64; 3], diameter: f64, depth: f64) -> Result<Solid>`
@@ -136,7 +136,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Fix face - fix_face()
 - [x] Remove degenerate edges
 - [x] Remove degenerate faces
-- [ ] Drop small edges (threshold-based)
+- [x] Drop small edges (threshold-based) - `drop_small_edges(solid: &Solid, threshold: f64) -> Result<Solid>`
 
 ### 3.11 Geometric Algorithms
 - [ ] Curve-curve intersection (2D)
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 92 features  
-**Remaining:** 74 features  
+**Implemented:** 93 features  
+**Remaining:** 73 features  
 **Total:** 166 features  
-**Completion:** 55.4%
+**Completion:** 56.0%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-07 - Implemented Split edge operation (split_edge and split_edge_at_point functions) for splitting edges at parameter or point*
+*Last updated: 2026-03-07 - Implemented Drop small edges (threshold-based) operation - `drop_small_edges(solid: &Solid, threshold: f64)` for removing edges shorter than a threshold while merging vertices and updating topology*

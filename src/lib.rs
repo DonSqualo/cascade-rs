@@ -35,7 +35,7 @@ pub use sweep::{make_revol, make_draft_prism};
 pub use loft::make_loft;
 pub use fillet::{make_fillet, make_fillet_variable, RadiusLaw, InterpolationMethod};
 pub use chamfer::make_chamfer;
-pub use draft::add_draft;
+pub use draft::{add_draft, taper};
 pub use feature::{make_hole, make_slot, make_rib, make_groove, circular_pattern, circular_pattern_fused};
 pub use heal::{sew_faces, fix_shape};
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};

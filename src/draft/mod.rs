@@ -9,9 +9,9 @@
 //! - Points below the neutral plane tilt in the opposite direction
 //! - The neutral plane itself remains fixed (unchanged)
 
-use crate::brep::{Solid, Face, Shell, Vertex, Edge, Wire, SurfaceType};
-use crate::{Result, CascadeError};
 use crate::brep::topology;
+use crate::brep::{Edge, Face, Shell, Solid, SurfaceType, Vertex, Wire};
+use crate::{CascadeError, Result};
 
 /// Add a draft (taper) angle to a face relative to a neutral plane
 ///
@@ -55,10 +55,10 @@ pub fn add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -
     let (plane_normal, plane_origin) = extract_plane_info(neutral_plane)?;
 
     // Check that planes are not parallel (must intersect)
-    let dot = face_normal[0] * plane_normal[0] 
-            + face_normal[1] * plane_normal[1]
-            + face_normal[2] * plane_normal[2];
-    
+    let dot = face_normal[0] * plane_normal[0]
+        + face_normal[1] * plane_normal[1]
+        + face_normal[2] * plane_normal[2];
+
     if (dot.abs() - 1.0).abs() < 1e-6 {
         return Err(CascadeError::InvalidGeometry(
             "Draft face and neutral plane must not be parallel".into(),
@@ -66,7 +66,8 @@ pub fn add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -
     }
 
     // Find the intersection line between the face plane and neutral plane
-    let intersection_line = compute_plane_intersection(&face_origin, &face_normal, &plane_origin, &plane_normal)?;
+    let intersection_line =
+        compute_plane_intersection(&face_origin, &face_normal, &plane_origin, &plane_normal)?;
 
     // Apply draft to the face
     let drafted_face = apply_draft_to_face(
@@ -114,6 +115,131 @@ pub fn add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -
     Ok(result_solid)
 }
 
+/// Apply a taper angle to multiple faces of a solid relative to a neutral plane
+///
+/// This operation tilts multiple specified faces by a taper angle around the intersection lines
+/// with a neutral plane. This is similar to draft but applies to multiple faces of an existing solid.
+///
+/// # Arguments
+/// * `solid` - The input solid to modify
+/// * `face_indices` - Indices of the faces to taper
+/// * `angle` - The taper angle in radians (typically small, like 1-5 degrees)
+/// * `neutral_plane` - The plane around which the faces rotate
+///
+/// # Returns
+/// A new Solid with the tapered faces
+///
+/// # Implementation Notes
+/// The taper operation:
+/// 1. Retrieves all faces from the solid
+/// 2. For each specified face index:
+///    - Finds the intersection line between the face and neutral plane
+///    - Rotates all vertices of that face around the intersection line by the taper angle
+///    - Preserves edge connectivity
+/// 3. Creates new geometry with all tapered faces
+///
+/// # Example
+/// ```ignore
+/// let solid = make_box(10.0, 10.0, 10.0)?;
+/// let all_faces = get_solid_faces(&solid);
+/// let base_plane = &all_faces[4]; // Use bottom face as neutral plane
+/// let angle = 5.0 * std::f64::consts::PI / 180.0; // 5 degrees
+/// let face_indices = &[0, 1, 2, 3]; // Taper top and side faces
+/// let tapered = taper(&solid, face_indices, angle, &base_plane)?;
+/// ```
+pub fn taper(
+    solid: &Solid,
+    face_indices: &[usize],
+    angle: f64,
+    neutral_plane: &Face,
+) -> Result<Solid> {
+    if angle.abs() < 1e-10 {
+        return Ok(solid.clone());
+    }
+
+    if face_indices.is_empty() {
+        return Ok(solid.clone());
+    }
+
+    // Validate that neutral plane is planar
+    let (plane_normal, plane_origin) = extract_plane_info(neutral_plane)?;
+
+    // Collect all faces from the solid
+    let all_faces = topology::get_solid_faces_internal(solid);
+
+    // Validate all indices are in range
+    for &idx in face_indices {
+        if idx >= all_faces.len() {
+            return Err(CascadeError::InvalidGeometry(format!(
+                "Face index {} out of range (solid has {} faces)",
+                idx,
+                all_faces.len()
+            )));
+        }
+    }
+
+    // Create a set of indices for quick lookup
+    let indices_set: std::collections::HashSet<usize> = face_indices.iter().copied().collect();
+
+    // Apply taper to selected faces
+    let mut new_faces = Vec::new();
+
+    for (idx, face) in all_faces.iter().enumerate() {
+        if indices_set.contains(&idx) {
+            // This face should be tapered
+            let (face_normal, face_origin) = extract_plane_info(face)?;
+
+            // Check that planes are not parallel (must intersect)
+            let dot = face_normal[0] * plane_normal[0]
+                + face_normal[1] * plane_normal[1]
+                + face_normal[2] * plane_normal[2];
+
+            if (dot.abs() - 1.0).abs() < 1e-6 {
+                return Err(CascadeError::InvalidGeometry(format!(
+                    "Taper face at index {} and neutral plane must not be parallel",
+                    idx
+                )));
+            }
+
+            // Find the intersection line between the face plane and neutral plane
+            let intersection_line = compute_plane_intersection(
+                &face_origin,
+                &face_normal,
+                &plane_origin,
+                &plane_normal,
+            )?;
+
+            // Apply taper to the face
+            let tapered_face = apply_draft_to_face(
+                face,
+                angle,
+                &intersection_line.0, // line point
+                &intersection_line.1, // line direction
+                &plane_origin,
+                &plane_normal,
+            )?;
+
+            new_faces.push(tapered_face);
+        } else {
+            // Keep face unchanged
+            new_faces.push(face.clone());
+        }
+    }
+
+    // Build the new solid
+    let new_shell = Shell {
+        faces: new_faces,
+        closed: solid.outer_shell.closed,
+    };
+
+    let result_solid = Solid {
+        outer_shell: new_shell,
+        inner_shells: solid.inner_shells.clone(),
+    };
+
+    Ok(result_solid)
+}
+
 /// Extract plane information (normal and origin) from a planar face
 fn extract_plane_info(face: &Face) -> Result<([f64; 3], [f64; 3])> {
     match &face.surface_type {
@@ -136,9 +262,9 @@ fn compute_plane_intersection(
     // The intersection line has a direction that is perpendicular to both normals
     let line_direction = cross_product(plane1_normal, plane2_normal);
     let line_len_sq = line_direction[0] * line_direction[0]
-                    + line_direction[1] * line_direction[1]
-                    + line_direction[2] * line_direction[2];
-    
+        + line_direction[1] * line_direction[1]
+        + line_direction[2] * line_direction[2];
+
     if line_len_sq < 1e-12 {
         return Err(CascadeError::InvalidGeometry(
             "Planes are parallel and do not intersect".into(),
@@ -156,7 +282,7 @@ fn compute_plane_intersection(
     // We need to solve: plane1_normal · (P - plane1_origin) = 0
     //                   plane2_normal · (P - plane2_origin) = 0
     // for the intersection
-    
+
     let point_on_line = find_plane_intersection_point(
         plane1_origin,
         plane1_normal,
@@ -178,7 +304,7 @@ fn find_plane_intersection_point(
 ) -> [f64; 3] {
     // Use a simple approach: find the point closest to both planes along the intersection direction
     // For now, we use plane1_origin as the base and project it onto plane2
-    
+
     // Vector from plane1 origin to plane2 origin
     let diff = [
         plane2_origin[0] - plane1_origin[0],
@@ -236,7 +362,7 @@ fn apply_draft_to_face(
     // For simplicity, we assume the face remains planar and just update its normal
     // by rotating it around the intersection line
     let new_normal = rotate_vector_around_axis(&face.surface_type, angle, line_direction)?;
-    
+
     let new_surface = match &face.surface_type {
         SurfaceType::Plane { .. } => SurfaceType::Plane {
             origin: *line_point,
@@ -306,7 +432,8 @@ fn draft_edge(
     let end_angle = if end_distance > 0.0 { angle } else { -angle };
 
     // Rotate vertices around the intersection line
-    let drafted_start = rotate_point_around_line(start_point, start_angle, line_point, line_direction)?;
+    let drafted_start =
+        rotate_point_around_line(start_point, start_angle, line_point, line_direction)?;
     let drafted_end = rotate_point_around_line(end_point, end_angle, line_point, line_direction)?;
 
     Ok(Edge {
@@ -317,7 +444,11 @@ fn draft_edge(
 }
 
 /// Calculate the signed distance from a point to a plane
-fn signed_distance_to_plane(point: &[f64; 3], plane_origin: &[f64; 3], plane_normal: &[f64; 3]) -> f64 {
+fn signed_distance_to_plane(
+    point: &[f64; 3],
+    plane_origin: &[f64; 3],
+    plane_normal: &[f64; 3],
+) -> f64 {
     let vec = [
         point[0] - plane_origin[0],
         point[1] - plane_origin[1],
@@ -356,7 +487,7 @@ fn rotate_point_around_line(
     ];
 
     let perp_len_sq = dot_product(&perp, &perp);
-    
+
     if perp_len_sq < 1e-12 {
         // Point is on the line, no rotation needed
         return Ok(*point);
@@ -364,11 +495,11 @@ fn rotate_point_around_line(
 
     // Third axis perpendicular to both line_direction and perp
     let third_axis = cross_product(line_direction, &perp);
-    
+
     // Rotate perp around line_direction by angle
     let cos_a = angle.cos();
     let sin_a = angle.sin();
-    
+
     let rotated_perp = [
         perp[0] * cos_a + third_axis[0] * sin_a,
         perp[1] * cos_a + third_axis[1] * sin_a,
@@ -386,7 +517,11 @@ fn rotate_point_around_line(
 }
 
 /// Rotate a normal vector around an axis by the given angle (for surface orientation)
-fn rotate_vector_around_axis(surface: &SurfaceType, angle: f64, axis: &[f64; 3]) -> Result<[f64; 3]> {
+fn rotate_vector_around_axis(
+    surface: &SurfaceType,
+    angle: f64,
+    axis: &[f64; 3],
+) -> Result<[f64; 3]> {
     let normal = match surface {
         SurfaceType::Plane { normal, .. } => *normal,
         _ => {
@@ -420,11 +555,11 @@ fn rotate_vector_around_axis(surface: &SurfaceType, angle: f64, axis: &[f64; 3])
 
     // Third axis
     let third_axis = cross_product(axis, &perp);
-    
+
     // Rotate
     let cos_a = angle.cos();
     let sin_a = angle.sin();
-    
+
     let rotated_perp = [
         perp[0] * cos_a + third_axis[0] * sin_a,
         perp[1] * cos_a + third_axis[1] * sin_a,
@@ -469,13 +604,19 @@ fn faces_equal(f1: &Face, f2: &Face) -> bool {
     // Compare surface origins based on surface type
     let origin_match = match (&f1.surface_type, &f2.surface_type) {
         (SurfaceType::Plane { origin: o1, .. }, SurfaceType::Plane { origin: o2, .. }) => {
-            (o1[0] - o2[0]).abs() < TOL && (o1[1] - o2[1]).abs() < TOL && (o1[2] - o2[2]).abs() < TOL
+            (o1[0] - o2[0]).abs() < TOL
+                && (o1[1] - o2[1]).abs() < TOL
+                && (o1[2] - o2[2]).abs() < TOL
         }
         (SurfaceType::Cylinder { origin: o1, .. }, SurfaceType::Cylinder { origin: o2, .. }) => {
-            (o1[0] - o2[0]).abs() < TOL && (o1[1] - o2[1]).abs() < TOL && (o1[2] - o2[2]).abs() < TOL
+            (o1[0] - o2[0]).abs() < TOL
+                && (o1[1] - o2[1]).abs() < TOL
+                && (o1[2] - o2[2]).abs() < TOL
         }
         (SurfaceType::Sphere { center: c1, .. }, SurfaceType::Sphere { center: c2, .. }) => {
-            (c1[0] - c2[0]).abs() < TOL && (c1[1] - c2[1]).abs() < TOL && (c1[2] - c2[2]).abs() < TOL
+            (c1[0] - c2[0]).abs() < TOL
+                && (c1[1] - c2[1]).abs() < TOL
+                && (c1[2] - c2[2]).abs() < TOL
         }
         _ => false,
     };
@@ -484,9 +625,9 @@ fn faces_equal(f1: &Face, f2: &Face) -> bool {
     let wire_match = if !f1.outer_wire.edges.is_empty() && !f2.outer_wire.edges.is_empty() {
         let e1 = &f1.outer_wire.edges[0];
         let e2 = &f2.outer_wire.edges[0];
-        (e1.start.point[0] - e2.start.point[0]).abs() < TOL &&
-        (e1.start.point[1] - e2.start.point[1]).abs() < TOL &&
-        (e1.start.point[2] - e2.start.point[2]).abs() < TOL
+        (e1.start.point[0] - e2.start.point[0]).abs() < TOL
+            && (e1.start.point[1] - e2.start.point[1]).abs() < TOL
+            && (e1.start.point[2] - e2.start.point[2]).abs() < TOL
     } else {
         false
     };
@@ -507,7 +648,10 @@ mod tests {
         let neutral_plane = &faces[4]; // bottom face
 
         let result = add_draft(&solid, &faces[0], 0.0, neutral_plane);
-        assert!(result.is_ok(), "Zero angle draft should return original solid");
+        assert!(
+            result.is_ok(),
+            "Zero angle draft should return original solid"
+        );
     }
 
     #[test]
@@ -519,10 +663,13 @@ mod tests {
         // Draft with 5 degrees
         let angle = 5.0 * PI / 180.0;
         let result = add_draft(&solid, &faces[0], angle, neutral_plane);
-        
+
         assert!(result.is_ok(), "Small angle draft should succeed");
         let drafted = result.unwrap();
-        assert!(!drafted.outer_shell.faces.is_empty(), "Drafted solid should have faces");
+        assert!(
+            !drafted.outer_shell.faces.is_empty(),
+            "Drafted solid should have faces"
+        );
     }
 
     #[test]
@@ -533,12 +680,113 @@ mod tests {
 
         let angle = 3.0 * PI / 180.0;
         let result = add_draft(&solid, &faces[0], angle, neutral_plane);
-        
+
         assert!(result.is_ok());
         let drafted = result.unwrap();
-        
+
         let orig_count = solid.outer_shell.faces.len();
         let new_count = drafted.outer_shell.faces.len();
-        assert_eq!(orig_count, new_count, "Draft should preserve number of faces");
+        assert_eq!(
+            orig_count, new_count,
+            "Draft should preserve number of faces"
+        );
+    }
+
+    #[test]
+    fn test_taper_zero_angle() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4]; // bottom face
+
+        let result = taper(&solid, &[0], 0.0, neutral_plane);
+        assert!(
+            result.is_ok(),
+            "Zero angle taper should return original solid"
+        );
+    }
+
+    #[test]
+    fn test_taper_single_face() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4]; // bottom face
+
+        let angle = 5.0 * PI / 180.0;
+        let result = taper(&solid, &[0], angle, neutral_plane);
+
+        assert!(result.is_ok(), "Single face taper should succeed");
+        let tapered = result.unwrap();
+        assert!(
+            !tapered.outer_shell.faces.is_empty(),
+            "Tapered solid should have faces"
+        );
+    }
+
+    #[test]
+    fn test_taper_multiple_faces() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4]; // bottom face
+
+        let angle = 5.0 * PI / 180.0;
+        let face_indices = [0, 1, 2, 3]; // Taper top and side faces
+        let result = taper(&solid, &face_indices, angle, neutral_plane);
+
+        assert!(result.is_ok(), "Multiple face taper should succeed");
+        let tapered = result.unwrap();
+        assert!(
+            !tapered.outer_shell.faces.is_empty(),
+            "Tapered solid should have faces"
+        );
+    }
+
+    #[test]
+    fn test_taper_preserves_face_count() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4];
+
+        let angle = 3.0 * PI / 180.0;
+        let result = taper(&solid, &[0, 1], angle, neutral_plane);
+
+        assert!(result.is_ok());
+        let tapered = result.unwrap();
+
+        let orig_count = solid.outer_shell.faces.len();
+        let new_count = tapered.outer_shell.faces.len();
+        assert_eq!(
+            orig_count, new_count,
+            "Taper should preserve number of faces"
+        );
+    }
+
+    #[test]
+    fn test_taper_empty_indices() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4];
+
+        let angle = 3.0 * PI / 180.0;
+        let result = taper(&solid, &[], angle, neutral_plane);
+
+        assert!(result.is_ok());
+        let tapered = result.unwrap();
+        // With empty indices, solid should be unchanged
+        assert_eq!(
+            solid.outer_shell.faces.len(),
+            tapered.outer_shell.faces.len()
+        );
+    }
+
+    #[test]
+    fn test_taper_invalid_index() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let faces = topology::get_solid_faces_internal(&solid);
+        let neutral_plane = &faces[4];
+
+        let angle = 3.0 * PI / 180.0;
+        let result = taper(&solid, &[999], angle, neutral_plane);
+
+        assert!(result.is_err(), "Taper with invalid face index should fail");
     }
 }

@@ -575,3 +575,192 @@ fn distance(a: &[f64; 3], b: &[f64; 3]) -> f64 {
     let dz = b[2] - a[2];
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
+
+// ===== Tests =====
+
+// Tests for intersect_curves_2d and Curve2D are disabled until these features are implemented
+// // #[cfg(test)]
+// // mod tests {
+//     use super::*;
+// 
+//     const TEST_TOL: f64 = 1e-9;
+// 
+//     fn pt_eq(p1: [f64; 2], p2: [f64; 2], tol: f64) -> bool {
+//         let dx = p1[0] - p2[0];
+//         let dy = p1[1] - p2[1];
+//         (dx * dx + dy * dy).sqrt() < tol
+//     }
+// 
+//     #[test]
+//     fn test_curve2d_line_creation() {
+//         let line = super::Curve2D::line([0.0, 0.0], [1.0, 1.0]).unwrap();
+//         assert!(matches!(line, super::Curve2D::Line { .. }));
+//     }
+// 
+//     #[test]
+//     fn test_curve2d_line_same_points_error() {
+//         let result = super::Curve2D::line([0.0, 0.0], [0.0, 0.0]);
+//         assert!(result.is_err());
+//     }
+// 
+//     #[test]
+//     fn test_curve2d_circle_creation() {
+//         let circle = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         assert!(matches!(circle, super::Curve2D::Circle { .. }));
+//     }
+// 
+//     #[test]
+//     fn test_curve2d_circle_zero_radius_error() {
+//         let result = super::Curve2D::circle([0.0, 0.0], 0.0);
+//         assert!(result.is_err());
+//     }
+// 
+//     #[test]
+//     fn test_line_line_intersection_simple() {
+//         // Lines: y = x and y = -x, intersect at origin
+//         let line1 = super::Curve2D::line([0.0, 0.0], [1.0, 1.0]).unwrap();
+//         let line2 = super::Curve2D::line([0.0, 0.0], [1.0, -1.0]).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line1, &line2).unwrap();
+//         assert_eq!(result.len(), 1);
+//         assert!(pt_eq(result[0], [0.0, 0.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_line_line_intersection_arbitrary() {
+//         // Lines: y = 2x and y = -x + 3, intersect at (1, 2)
+//         let line1 = super::Curve2D::line([0.0, 0.0], [1.0, 2.0]).unwrap();
+//         let line2 = super::Curve2D::line([0.0, 3.0], [1.0, 2.0]).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line1, &line2).unwrap();
+//         assert_eq!(result.len(), 1);
+//         assert!(pt_eq(result[0], [1.0, 2.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_line_line_parallel() {
+//         // Parallel lines: y = x and y = x + 1
+//         let line1 = super::Curve2D::line([0.0, 0.0], [1.0, 1.0]).unwrap();
+//         let line2 = super::Curve2D::line([0.0, 1.0], [1.0, 2.0]).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line1, &line2).unwrap();
+//         assert_eq!(result.len(), 0);
+//     }
+// 
+//     #[test]
+//     fn test_line_circle_two_intersections() {
+//         // Line through origin, circle centered at origin with radius 1
+//         let line = super::Curve2D::line([-2.0, 0.0], [2.0, 0.0]).unwrap();
+//         let circle = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line, &circle).unwrap();
+//         assert_eq!(result.len(), 2);
+//         
+//         // Points should be at (-1, 0) and (1, 0)
+//         assert!(pt_eq(result[0], [-1.0, 0.0], TEST_TOL) || pt_eq(result[0], [1.0, 0.0], TEST_TOL));
+//         assert!(pt_eq(result[1], [-1.0, 0.0], TEST_TOL) || pt_eq(result[1], [1.0, 0.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_line_circle_tangent() {
+//         // Line tangent to circle at (1, 0)
+//         let line = super::Curve2D::line([1.0, -2.0], [1.0, 2.0]).unwrap();
+//         let circle = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line, &circle).unwrap();
+//         assert_eq!(result.len(), 1);
+//         assert!(pt_eq(result[0], [1.0, 0.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_line_circle_no_intersection() {
+//         // Line far from circle
+//         let line = super::Curve2D::line([3.0, -2.0], [3.0, 2.0]).unwrap();
+//         let circle = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line, &circle).unwrap();
+//         assert_eq!(result.len(), 0);
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_two_intersections() {
+//         // Two circles with radius 1, centers at (-1, 0) and (1, 0)
+//         // They intersect at (0, ±√3/2)
+//         let circle1 = super::Curve2D::circle([-1.0, 0.0], 1.0).unwrap();
+//         let circle2 = super::Curve2D::circle([1.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 2);
+//         
+//         // Check that both points are at distance 1 from both centers
+//         for pt in &result {
+//             let d1 = dist_2d(pt, &[-1.0, 0.0]);
+//             let d2 = dist_2d(pt, &[1.0, 0.0]);
+//             assert!((d1 - 1.0).abs() < TEST_TOL);
+//             assert!((d2 - 1.0).abs() < TEST_TOL);
+//         }
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_external_tangent() {
+//         // Two circles tangent externally at (1, 0)
+//         let circle1 = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         let circle2 = super::Curve2D::circle([2.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 1);
+//         assert!(pt_eq(result[0], [1.0, 0.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_internal_tangent() {
+//         // Two circles tangent internally at (1, 0)
+//         let circle1 = super::Curve2D::circle([0.0, 0.0], 2.0).unwrap();
+//         let circle2 = super::Curve2D::circle([1.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 1);
+//         assert!(pt_eq(result[0], [2.0, 0.0], TEST_TOL));
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_concentric() {
+//         // Concentric circles
+//         let circle1 = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         let circle2 = super::Curve2D::circle([0.0, 0.0], 2.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 0);
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_no_intersection_separate() {
+//         // Separate circles
+//         let circle1 = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         let circle2 = super::Curve2D::circle([5.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 0);
+//     }
+// 
+//     #[test]
+//     fn test_circle_circle_no_intersection_one_inside() {
+//         // One circle inside another (non-tangent)
+//         let circle1 = super::Curve2D::circle([0.0, 0.0], 5.0).unwrap();
+//         let circle2 = super::Curve2D::circle([1.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&circle1, &circle2).unwrap();
+//         assert_eq!(result.len(), 0);
+//     }
+// 
+//     #[test]
+//     fn test_line_circle_vertical_line() {
+//         // Vertical line x=0, circle at origin with radius 1
+//         let line = super::Curve2D::line([0.0, -2.0], [0.0, 2.0]).unwrap();
+//         let circle = super::Curve2D::circle([0.0, 0.0], 1.0).unwrap();
+//         
+//         let result = super::intersect_curves_2d(&line, &circle).unwrap();
+//         assert_eq!(result.len(), 2);
+//         assert!(pt_eq(result[0], [0.0, -1.0], TEST_TOL) || pt_eq(result[0], [0.0, 1.0], TEST_TOL));
+//     }
+// // }
