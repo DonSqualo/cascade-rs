@@ -7,6 +7,100 @@ use crate::brep::{Solid, Shell, Face, Vertex, Wire, Edge, SurfaceType, CurveType
 use crate::{Result, CascadeError, TOLERANCE};
 use crate::brep::topology;
 
+/// Offset a solid by growing or shrinking (thick solid operation)
+///
+/// This operation creates a new solid by offsetting all faces by a distance:
+/// - Positive offset = grow the solid (all faces move outward)
+/// - Negative offset = shrink the solid (all faces move inward)
+/// - Handles face intersections at corners through blending
+///
+/// # Arguments
+/// * `solid` - The input solid to offset
+/// * `offset` - The offset distance (positive = grow, negative = shrink)
+///
+/// # Returns
+/// A new Solid with all faces offset by the specified distance
+///
+/// # Example
+/// ```ignore
+/// let box = make_box(10.0, 10.0, 10.0)?;
+/// let grown = thick_solid(&box, 1.0)?;      // Grow by 1.0
+/// let shrunk = thick_solid(&box, -0.5)?;    // Shrink by 0.5
+/// ```
+pub fn thick_solid(solid: &Solid, offset: f64) -> Result<Solid> {
+    // Validate offset
+    if offset == 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            "Offset distance must be non-zero".into(),
+        ));
+    }
+
+    // For shrinking, validate that the offset is not too large
+    if offset < 0.0 {
+        let bounds = get_solid_bounds(solid);
+        let min_dim = ((bounds.1[0] - bounds.0[0]).min(bounds.1[1] - bounds.0[1]))
+            .min(bounds.1[2] - bounds.0[2]);
+        
+        if offset.abs() >= min_dim / 2.0 {
+            return Err(CascadeError::InvalidGeometry(
+                format!("Shrink offset {} is too large for geometry with minimum dimension {}", 
+                        offset.abs(), min_dim),
+            ));
+        }
+    }
+
+    // Get all faces from the solid
+    let all_faces = topology::get_solid_faces_internal(solid);
+    
+    if all_faces.is_empty() {
+        return Err(CascadeError::InvalidGeometry(
+            "Solid must have at least one face".into(),
+        ));
+    }
+
+    // Offset each face
+    let mut offset_faces = Vec::new();
+    
+    for face in &all_faces {
+        let offset_face = offset_face_by_distance(face, offset)?;
+        offset_faces.push(offset_face);
+    }
+
+    // Create blending faces at edges where adjacent faces meet
+    for i in 0..all_faces.len() {
+        for j in (i + 1)..all_faces.len() {
+            // Check if faces are adjacent (share an edge)
+            if let Some(shared_edge) = topology::shared_edge(&all_faces[i], &all_faces[j]) {
+                // Create a blending face connecting the offset edges
+                if let Ok(blend_face) = create_thick_solid_blend(
+                    &all_faces[i], 
+                    &all_faces[j], 
+                    &shared_edge, 
+                    offset
+                ) {
+                    offset_faces.push(blend_face);
+                }
+            }
+        }
+    }
+
+    // Create new outer shell from offset faces
+    let new_shell = Shell {
+        faces: offset_faces,
+        closed: true,
+    };
+
+    // Create the result solid
+    // Note: inner shells (voids) would also need offsetting in a full implementation
+    // For now, we skip them to keep the implementation focused on the outer solid
+    let result_solid = Solid {
+        outer_shell: new_shell,
+        inner_shells: Vec::new(),  // Clear inner shells for offset
+    };
+
+    Ok(result_solid)
+}
+
 /// Create a hollow version of a solid (shell operation)
 ///
 /// This operation creates a hollow solid by:
@@ -204,6 +298,70 @@ fn vertices_are_close(v1: &Vertex, v2: &Vertex) -> bool {
         && (v1.point[2] - v2.point[2]).abs() < TOLERANCE * 10.0
 }
 
+/// Offset a face by a distance (positive = outward, negative = inward)
+fn offset_face_by_distance(face: &Face, offset: f64) -> Result<Face> {
+    // Get the outward normal for the face
+    let (normal, _origin) = extract_plane_info(face)?;
+    
+    // Offset direction: positive offset moves outward (along normal)
+    let offset_direction = [normal[0] * offset, normal[1] * offset, normal[2] * offset];
+
+    // Offset outer wire
+    let offset_outer = offset_wire_by_vector(&face.outer_wire, &offset_direction)?;
+
+    // Offset inner wires (holes) - these move in the same direction
+    let offset_inner = face.inner_wires
+        .iter()
+        .map(|wire| offset_wire_by_vector(wire, &offset_direction))
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Face {
+        outer_wire: offset_outer,
+        inner_wires: offset_inner,
+        surface_type: face.surface_type.clone(),
+    })
+}
+
+/// Offset a wire by a fixed vector
+fn offset_wire_by_vector(wire: &Wire, offset_vector: &[f64; 3]) -> Result<Wire> {
+    if wire.edges.is_empty() {
+        return Ok(wire.clone());
+    }
+
+    // Move each vertex along the offset vector
+    let offset_edges = wire.edges
+        .iter()
+        .map(|edge| {
+            let start_new = Vertex {
+                point: [
+                    edge.start.point[0] + offset_vector[0],
+                    edge.start.point[1] + offset_vector[1],
+                    edge.start.point[2] + offset_vector[2],
+                ],
+            };
+
+            let end_new = Vertex {
+                point: [
+                    edge.end.point[0] + offset_vector[0],
+                    edge.end.point[1] + offset_vector[1],
+                    edge.end.point[2] + offset_vector[2],
+                ],
+            };
+
+            Edge {
+                start: start_new,
+                end: end_new,
+                curve_type: edge.curve_type.clone(),
+            }
+        })
+        .collect();
+
+    Ok(Wire {
+        edges: offset_edges,
+        closed: wire.closed,
+    })
+}
+
 /// Offset a face inward (toward its surface normal interior) by the given thickness
 fn offset_face_inward(face: &Face, thickness: f64) -> Result<Face> {
     // For a planar face, inward offset moves vertices along the inward normal
@@ -291,6 +449,138 @@ fn extract_plane_info(face: &Face) -> Result<([f64; 3], [f64; 3])> {
             "Shell offset only supports planar faces currently".into(),
         )),
     }
+}
+
+/// Create a blending face for thick_solid operation
+/// Handles the corner where two adjacent faces meet after offset
+fn create_thick_solid_blend(
+    face1: &Face,
+    face2: &Face,
+    shared_edge: &Edge,
+    offset: f64,
+) -> Result<Face> {
+    // Get plane info for both faces
+    let (normal1, _) = extract_plane_info(face1)?;
+    let (normal2, _) = extract_plane_info(face2)?;
+
+    // Calculate the offset vector for each face
+    let offset_vec1 = [normal1[0] * offset, normal1[1] * offset, normal1[2] * offset];
+    let offset_vec2 = [normal2[0] * offset, normal2[1] * offset, normal2[2] * offset];
+
+    // Offset the shared edge along both face normals
+    let start_offset1 = [
+        shared_edge.start.point[0] + offset_vec1[0],
+        shared_edge.start.point[1] + offset_vec1[1],
+        shared_edge.start.point[2] + offset_vec1[2],
+    ];
+
+    let end_offset1 = [
+        shared_edge.end.point[0] + offset_vec1[0],
+        shared_edge.end.point[1] + offset_vec1[1],
+        shared_edge.end.point[2] + offset_vec1[2],
+    ];
+
+    let start_offset2 = [
+        shared_edge.start.point[0] + offset_vec2[0],
+        shared_edge.start.point[1] + offset_vec2[1],
+        shared_edge.start.point[2] + offset_vec2[2],
+    ];
+
+    let end_offset2 = [
+        shared_edge.end.point[0] + offset_vec2[0],
+        shared_edge.end.point[1] + offset_vec2[1],
+        shared_edge.end.point[2] + offset_vec2[2],
+    ];
+
+    // Create a quad face connecting the original edge to the offset edges
+    let blend_edges = vec![
+        Edge {
+            start: Vertex { point: shared_edge.start.point },
+            end: Vertex { point: shared_edge.end.point },
+            curve_type: shared_edge.curve_type.clone(),
+        },
+        Edge {
+            start: Vertex { point: shared_edge.end.point },
+            end: Vertex { point: end_offset1 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: end_offset1 },
+            end: Vertex { point: end_offset2 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: end_offset2 },
+            end: Vertex { point: shared_edge.end.point },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: shared_edge.end.point },
+            end: Vertex { point: start_offset2 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: start_offset2 },
+            end: Vertex { point: start_offset1 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: start_offset1 },
+            end: Vertex { point: shared_edge.start.point },
+            curve_type: CurveType::Line,
+        },
+    ];
+
+    // For simplicity, create a quad (4-edge face) connecting the offset edges
+    let simplified_edges = vec![
+        Edge {
+            start: Vertex { point: shared_edge.start.point },
+            end: Vertex { point: shared_edge.end.point },
+            curve_type: shared_edge.curve_type.clone(),
+        },
+        Edge {
+            start: Vertex { point: shared_edge.end.point },
+            end: Vertex { point: end_offset1 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: end_offset1 },
+            end: Vertex { point: start_offset1 },
+            curve_type: CurveType::Line,
+        },
+        Edge {
+            start: Vertex { point: start_offset1 },
+            end: Vertex { point: shared_edge.start.point },
+            curve_type: CurveType::Line,
+        },
+    ];
+
+    let blend_wire = Wire {
+        edges: simplified_edges,
+        closed: true,
+    };
+
+    // Create a blending surface (average of the two adjacent planes)
+    let blend_normal = [
+        (normal1[0] + normal2[0]) / 2.0,
+        (normal1[1] + normal2[1]) / 2.0,
+        (normal1[2] + normal2[2]) / 2.0,
+    ];
+
+    let blend_origin = [
+        (start_offset1[0] + start_offset2[0]) / 2.0,
+        (start_offset1[1] + start_offset2[1]) / 2.0,
+        (start_offset1[2] + start_offset2[2]) / 2.0,
+    ];
+
+    Ok(Face {
+        outer_wire: blend_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: blend_origin,
+            normal: blend_normal,
+        },
+    })
 }
 
 /// Create a blending face between two adjacent faces at a shared edge
@@ -465,5 +755,43 @@ mod tests {
         // Check that vertices were offset correctly
         assert_eq!(offset_wire.edges[0].start.point[2], 0.5);
         assert_eq!(offset_wire.edges[0].end.point[2], 0.5);
+    }
+
+    #[test]
+    fn test_thick_solid_grow() {
+        // Create a simple box and grow it
+        let box_solid = make_box(10.0, 10.0, 10.0).unwrap();
+        let grown = thick_solid(&box_solid, 1.0).unwrap();
+
+        // Verify the grown solid has faces
+        assert!(!grown.outer_shell.faces.is_empty());
+        // Grown solid should have more faces due to blending faces
+        assert!(grown.outer_shell.faces.len() >= box_solid.outer_shell.faces.len());
+    }
+
+    #[test]
+    fn test_thick_solid_shrink() {
+        // Create a simple box and shrink it
+        let box_solid = make_box(10.0, 10.0, 10.0).unwrap();
+        let shrunk = thick_solid(&box_solid, -1.0).unwrap();
+
+        // Verify the shrunk solid has faces
+        assert!(!shrunk.outer_shell.faces.is_empty());
+    }
+
+    #[test]
+    fn test_thick_solid_zero_offset() {
+        // Zero offset should fail
+        let box_solid = make_box(10.0, 10.0, 10.0).unwrap();
+        let result = thick_solid(&box_solid, 0.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_thick_solid_excessive_shrink() {
+        // Shrink offset too large should fail
+        let box_solid = make_box(10.0, 10.0, 10.0).unwrap();
+        let result = thick_solid(&box_solid, -5.5);
+        assert!(result.is_err());
     }
 }

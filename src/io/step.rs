@@ -66,21 +66,32 @@ impl StepParser {
         
         let data = &content[data_start + 5..data_end];
         
-        // Parse each entity line
+        // Handle multi-line entities by accumulating lines until we find a complete statement ending with ;
+        let mut current_entity = String::new();
+        
         for line in data.lines() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
             }
             
-            // Remove trailing semicolon
-            let line = if line.ends_with(';') {
-                &line[..line.len() - 1]
-            } else {
-                line
-            };
+            current_entity.push(' ');
+            current_entity.push_str(line);
             
-            self.parse_entity_line(line)?;
+            // Check if this line ends with semicolon (complete entity)
+            if line.ends_with(';') {
+                let entity_line = current_entity.trim();
+                
+                // Remove trailing semicolon
+                let entity_line = if entity_line.ends_with(';') {
+                    &entity_line[..entity_line.len() - 1]
+                } else {
+                    entity_line
+                };
+                
+                self.parse_entity_line(entity_line)?;
+                current_entity.clear();
+            }
         }
         
         Ok(())
@@ -324,6 +335,13 @@ impl StepParser {
     }
     
     fn parse_list(&self, args_str: &str) -> Result<Vec<String>> {
+        let mut args_str = args_str.trim();
+        
+        // Handle parenthesized lists: unwrap (#1, #2, ...) to #1, #2, ...
+        if args_str.starts_with('(') && args_str.ends_with(')') {
+            args_str = &args_str[1..args_str.len()-1];
+        }
+        
         let mut result = vec![];
         let mut current = String::new();
         let mut depth = 0;
@@ -392,9 +410,23 @@ impl StepParser {
     
     fn resolve_point(&self, s: &str) -> Result<[f64; 3]> {
         let id = self.resolve_id(s)?;
-        self.points.get(&id)
-            .copied()
-            .ok_or_else(|| CascadeError::InvalidGeometry(format!("Point not found: #{}", id)))
+        
+        // Try to get direct point first
+        if let Some(point) = self.points.get(&id) {
+            return Ok(*point);
+        }
+        
+        // Try to resolve via entity reference (e.g., AXIS2_PLACEMENT_3D location)
+        if let Some(entity) = self.entities.get(&id) {
+            match entity {
+                StepEntity::Axis2Placement3D { location, .. } => {
+                    return Ok(*location);
+                },
+                _ => {}
+            }
+        }
+        
+        Err(CascadeError::InvalidGeometry(format!("Point not found: #{}", id)))
     }
     
     fn resolve_direction(&self, s: &str) -> Result<[f64; 3]> {
@@ -408,8 +440,12 @@ impl StepParser {
             } else {
                 Ok([0.0, 0.0, 1.0])
             }
-        } else if let Some(StepEntity::Direction { ratios }) = self.entities.get(&id) {
-            Ok(*ratios)
+        } else if let Some(entity) = self.entities.get(&id) {
+            match entity {
+                StepEntity::Direction { ratios } => Ok(*ratios),
+                StepEntity::Axis2Placement3D { axis, .. } => Ok(*axis),
+                _ => Ok([0.0, 0.0, 1.0]),
+            }
         } else {
             Ok([0.0, 0.0, 1.0])
         }

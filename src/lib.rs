@@ -17,6 +17,7 @@ pub mod mesh;
 pub mod io;
 pub mod query;
 pub mod check;
+pub mod intersect;
 
 // Re-exports for convenience
 pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
@@ -29,6 +30,7 @@ pub use fillet::make_fillet;
 pub use chamfer::make_chamfer;
 pub use heal::{sew_faces, fix_shape};
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
+pub use intersect::intersect_surfaces;
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;
