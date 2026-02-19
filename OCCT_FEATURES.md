@@ -110,7 +110,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Shell (hollow solid)
 
 ### 3.7 Draft & Taper
-- [ ] Draft angle
+- [x] Draft angle - `add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -> Result<Solid>`
 - [ ] Taper
 
 ### 3.8 Feature Operations
@@ -242,7 +242,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** ~37 features (surface-surface intersection added)
+**Implemented:** ~38 features (draft angle added)
 **Total OCCT Features:** ~200+ core features
 
 **Priority Order:**
@@ -254,4 +254,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-19 - Implemented thick_solid offset operation (grow/shrink solids), and exported offset module*
+*Last updated: 2026-02-19 - Implemented add_draft() for tapered/draft angles on faces with neutral plane support*

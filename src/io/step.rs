@@ -12,18 +12,19 @@ use std::fs;
 enum StepEntity {
     CartesianPoint { coords: [f64; 3] },
     Direction { ratios: [f64; 3] },
-    Axis2Placement3D { location: [f64; 3], axis: [f64; 3], ref_direction: [f64; 3] },
+    Axis2Placement3D { location_id: usize, axis_id: usize, ref_dir_id: usize },
     VertexPoint { point_id: usize },
-    Line { start: [f64; 3], direction: [f64; 3] },
-    Circle { center: [f64; 3], radius: f64, axis: [f64; 3] },
+    Line { start_id: usize, dir_id: usize },
+    Circle { center_id: usize, radius: f64, axis_id: usize },
     EdgeCurve { start_id: usize, end_id: usize, curve_id: usize },
+    OrientedEdge { edge_id: usize },
     EdgeLoop { edge_ids: Vec<usize> },
     FaceBound { loop_id: usize },
     FaceOuterBound { loop_id: usize },
     AdvancedFace { bounds: Vec<usize>, surface_id: usize },
-    Plane { location: [f64; 3], normal: [f64; 3] },
-    Cylinder { location: [f64; 3], axis: [f64; 3], radius: f64 },
-    Sphere { center: [f64; 3], radius: f64 },
+    Plane { location_id: usize, normal_id: usize },
+    Cylinder { location_id: usize, axis_id: usize, radius: f64 },
+    Sphere { center_id: usize, radius: f64 },
     ClosedShell { face_ids: Vec<usize> },
     ManifoldSolidBrep { shell_id: usize },
 }
@@ -40,6 +41,7 @@ pub fn read_step(path: &str) -> Result<Shape> {
 struct StepParser {
     entities: HashMap<usize, StepEntity>,
     points: HashMap<usize, [f64; 3]>,
+    raw_entities: HashMap<usize, String>,  // Store raw entity strings for deferred parsing
 }
 
 impl StepParser {
@@ -47,10 +49,29 @@ impl StepParser {
         let mut parser = StepParser {
             entities: HashMap::new(),
             points: HashMap::new(),
+            raw_entities: HashMap::new(),
         };
         
         parser.parse_content(content)?;
+        parser.finalize()?;
         Ok(parser)
+    }
+    
+    fn finalize(&mut self) -> Result<()> {
+        // Second pass: extract all CARTESIAN_POINT coordinates first
+        for (id, raw) in self.raw_entities.iter() {
+            if raw.trim().starts_with("CARTESIAN_POINT") {
+                if let Some(paren_idx) = raw.find('(') {
+                    let args_end = raw.rfind(')')
+                        .ok_or_else(|| CascadeError::InvalidGeometry("Missing closing paren".into()))?;
+                    let args_str = &raw[paren_idx + 1..args_end];
+                    let args_to_parse = self.skip_name_and_parse_args(args_str);
+                    let coords = self.parse_coords(&args_to_parse)?;
+                    self.points.insert(*id, coords);
+                }
+            }
+        }
+        Ok(())
     }
     
     fn parse_content(&mut self, content: &str) -> Result<()> {
@@ -112,6 +133,9 @@ impl StepParser {
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| CascadeError::InvalidGeometry(format!("Invalid entity ID: {}", id_str)))?;
         
+        // Store raw entity for deferred parsing
+        self.raw_entities.insert(id, entity_str.to_string());
+        
         // Parse entity
         let entity = self.parse_entity(entity_str, id)?;
         self.entities.insert(id, entity);
@@ -157,6 +181,24 @@ impl StepParser {
                     let coords = self.parse_coords(&args_to_parse)?;
                     self.points.insert(id, coords);
                     StepEntity::CartesianPoint { coords }
+                },
+                "FACE_SURFACE" => {
+                    // FACE_SURFACE has same structure as ADVANCED_FACE
+                    let parts = self.parse_list(&args_to_parse)?;
+                    let bounds = if parts.len() > 0 {
+                        let bound_list = self.parse_list(&parts[0])?;
+                        bound_list.iter()
+                            .map(|p| self.resolve_id(p))
+                            .collect::<Result<Vec<_>>>()?
+                    } else {
+                        vec![]
+                    };
+                    let surface_id = if parts.len() > 1 {
+                        self.resolve_id(&parts[1])?
+                    } else {
+                        0
+                    };
+                    StepEntity::AdvancedFace { bounds, surface_id }
                 },
                 "DIRECTION" => {
                     let ratios = self.parse_coords(&args_to_parse)?;
@@ -225,6 +267,20 @@ impl StepParser {
                     let end_id = self.resolve_id(&parts[1])?;
                     let curve_id = self.resolve_id(&parts[2])?;
                     StepEntity::EdgeCurve { start_id, end_id, curve_id }
+                },
+                "ORIENTED_EDGE" => {
+                    // Format: ORIENTED_EDGE('', *, *, edge_ref, .T./.F.)
+                    // The edge_ref is typically the fourth argument, after name and two wildcards
+                    let parts = self.parse_list(&args_to_parse)?;
+                    let edge_id = if parts.len() > 2 {
+                        // Skip the first two parts (usually wildcards), use the third
+                        self.resolve_id(&parts[2])?
+                    } else if parts.len() > 0 {
+                        self.resolve_id(&parts[0])?
+                    } else {
+                        0
+                    };
+                    StepEntity::OrientedEdge { edge_id }
                 },
                 "EDGE_LOOP" => {
                     let parts = self.parse_list(&args_to_parse)?;
