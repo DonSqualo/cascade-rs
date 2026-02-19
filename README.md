@@ -7,15 +7,7 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 04:04:10
-
-### Primitives (6/6)
-- [x] `primitive::box` — Box/cuboid creation
-- [x] `primitive::sphere` — Sphere creation
-- [x] `primitive::cylinder` — Cylinder creation
-- [x] `primitive::cone` — Cone creation
-- [x] `primitive::torus` — Torus creation
-- [x] `primitive::wedge` — Wedge/prism creation
+Last validated: 2026-02-19 04:04:20
 
 ### Boolean Operations (0/4)
 - [ ] `boolean::fuse` — Union of solids
@@ -32,6 +24,14 @@ Last validated: 2026-02-19 04:04:10
 - [x] `brep::solid` — Solid representation
 - [x] `brep::compound` — Compound shapes
 - [ ] `brep::topology` — Topological queries (adjacent, connected, etc.)
+
+### Primitives (6/6)
+- [x] `primitive::box` — Box/cuboid creation
+- [x] `primitive::sphere` — Sphere creation
+- [x] `primitive::cylinder` — Cylinder creation
+- [x] `primitive::cone` — Cone creation
+- [x] `primitive::torus` — Torus creation
+- [x] `primitive::wedge` — Wedge/prism creation
 
 **Total: 13/18 features passing (72%)**
 <!-- FEATURE_PARITY_END -->
