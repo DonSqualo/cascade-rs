@@ -7,7 +7,7 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 04:11:35
+Last validated: 2026-02-19 04:11:49
 
 ### Primitives (6/6)
 - [x] `primitive::box` — Box/cuboid creation
