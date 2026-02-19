@@ -141,7 +141,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 3.11 Geometric Algorithms
 - [ ] Curve-curve intersection (2D)
 - [ ] Curve-surface intersection
-- [ ] Surface-surface intersection
+- [x] Surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)
 - [ ] Point projection to curve
 - [ ] Point projection to surface
 - [ ] Curve projection to surface
@@ -242,17 +242,16 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** ~36 features (shape healing module added)
+**Implemented:** ~37 features (surface-surface intersection added)
 **Total OCCT Features:** ~200+ core features
 
 **Priority Order:**
-1. Sweeps & Extrusions (prism, revol, pipe)
-2. Filleting & Chamfering
-3. More curve/surface types (BSpline)
-4. Shape healing
-5. Full STEP compliance
-6. IGES support
+1. Curve-surface intersection (for boolean operations)
+2. More curve/surface types (BSpline intersection)
+3. Full STEP compliance
+4. IGES support
+5. Point/curve/surface projection operations
 
 ---
 
-*Last updated: 2026-02-19 - Implemented shape healing module (sew_faces, fix_shape)*
+*Last updated: 2026-02-19 - Implemented surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)*
