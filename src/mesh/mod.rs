@@ -1,6 +1,7 @@
 //! Tessellation and meshing
 
 use crate::brep::{Face, SurfaceType, Wire};
+use crate::brep::Solid;
 use crate::{Result, CascadeError};
 use serde::{Deserialize, Serialize};
 use std::fs::File;

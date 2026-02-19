@@ -276,3 +276,65 @@ fn calculate_face_center_and_normal(face: &Face) -> ([f64; 3], [f64; 3]) {
     
     (center, normal)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitive::make_box;
+    
+    #[test]
+    fn test_bounding_box_unit_box() {
+        let solid = make_box(1.0, 1.0, 1.0).unwrap();
+        let shape = Shape::Solid(solid);
+        let (min, max) = bounding_box(&shape).unwrap();
+        
+        // Unit box from (0,0,0) to (1,1,1)
+        assert!((min[0] - 0.0).abs() < 1e-6);
+        assert!((min[1] - 0.0).abs() < 1e-6);
+        assert!((min[2] - 0.0).abs() < 1e-6);
+        
+        assert!((max[0] - 1.0).abs() < 1e-6);
+        assert!((max[1] - 1.0).abs() < 1e-6);
+        assert!((max[2] - 1.0).abs() < 1e-6);
+    }
+    
+    #[test]
+    fn test_bounding_box_custom_box() {
+        let solid = make_box(2.0, 3.0, 4.0).unwrap();
+        let shape = Shape::Solid(solid);
+        let (min, max) = bounding_box(&shape).unwrap();
+        
+        assert!((max[0] - min[0] - 2.0).abs() < 1e-6);
+        assert!((max[1] - min[1] - 3.0).abs() < 1e-6);
+        assert!((max[2] - min[2] - 4.0).abs() < 1e-6);
+    }
+    
+    #[test]
+    fn test_mass_properties_unit_box() {
+        let solid = make_box(1.0, 1.0, 1.0).unwrap();
+        let props = mass_properties(&solid).unwrap();
+        
+        // Unit box should have volume of 1.0
+        assert!((props.volume - 1.0).abs() < 0.1);
+        
+        // Surface area should be 6 (6 unit squares)
+        assert!((props.surface_area - 6.0).abs() < 0.5);
+        
+        // Center of mass should be at (0.5, 0.5, 0.5)
+        assert!((props.center_of_mass[0] - 0.5).abs() < 0.2);
+        assert!((props.center_of_mass[1] - 0.5).abs() < 0.2);
+        assert!((props.center_of_mass[2] - 0.5).abs() < 0.2);
+    }
+    
+    #[test]
+    fn test_mass_properties_box_2x3x4() {
+        let solid = make_box(2.0, 3.0, 4.0).unwrap();
+        let props = mass_properties(&solid).unwrap();
+        
+        // Volume should be 2*3*4 = 24
+        assert!((props.volume - 24.0).abs() < 3.0);
+        
+        // Surface area should be 2*(2*3 + 2*4 + 3*4) = 2*26 = 52
+        assert!((props.surface_area - 52.0).abs() < 5.0);
+    }
+}
