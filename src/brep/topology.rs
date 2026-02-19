@@ -147,6 +147,11 @@ fn get_face_edges(face: &Face) -> Vec<Edge> {
 
 /// Get all faces from a solid (outer shell + inner shells)
 fn get_solid_faces(solid: &Solid) -> Vec<Face> {
+    get_solid_faces_internal(solid)
+}
+
+/// Get all faces from a solid (outer shell + inner shells) - public for use by other modules
+pub fn get_solid_faces_internal(solid: &Solid) -> Vec<Face> {
     let mut faces = Vec::new();
     
     // Add faces from outer shell

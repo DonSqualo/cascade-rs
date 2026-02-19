@@ -24,11 +24,11 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 2.2 Geometry - Curves
 - [x] Line
 - [x] Circle
-- [ ] Ellipse
+- [x] Ellipse
 - [ ] Parabola
 - [ ] Hyperbola
-- [ ] BezierCurve
-- [ ] BSplineCurve
+- [x] BezierCurve
+- [x] BSplineCurve
 - [ ] OffsetCurve
 - [ ] TrimmedCurve
 
@@ -255,4 +255,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-19*
+*Last updated: 2026-02-19 - Added Ellipse, Bezier, and BSpline curve types*

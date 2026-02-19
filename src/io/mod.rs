@@ -148,6 +148,68 @@ impl<W: Write> StepWriter<W> {
                 self.entities.push(arc_entity);
                 arc_id
             }
+            CurveType::Ellipse { center, major_axis, minor_axis } => {
+                // Ellipse support in STEP
+                let ellipse_id = self.next_id();
+                let center_id = self.next_id();
+                let axis_id = self.next_id();
+                let ref_axis_id = self.next_id();
+                
+                let center_entity = format!(
+                    "#{} = CARTESIAN_POINT('', ({:.6}, {:.6}, {:.6}));",
+                    center_id, center[0], center[1], center[2]
+                );
+                self.entities.push(center_entity);
+                
+                // Calculate magnitudes of axes
+                let major_len = (major_axis[0].powi(2) + major_axis[1].powi(2) + major_axis[2].powi(2)).sqrt();
+                let minor_len = (minor_axis[0].powi(2) + minor_axis[1].powi(2) + minor_axis[2].powi(2)).sqrt();
+                
+                let axis_entity = format!("#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));", 
+                    axis_id, major_axis[0], major_axis[1], major_axis[2]);
+                self.entities.push(axis_entity);
+                
+                let ref_axis_entity = format!("#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));", 
+                    ref_axis_id, minor_axis[0], minor_axis[1], minor_axis[2]);
+                self.entities.push(ref_axis_entity);
+                
+                let ellipse_entity = format!(
+                    "#{} = ELLIPSE('', #{}, {:.6}, {:.6});",
+                    ellipse_id, center_id, major_len, minor_len
+                );
+                self.entities.push(ellipse_entity);
+                ellipse_id
+            }
+            CurveType::Bezier { control_points } => {
+                // Bezier curve - write as B-spline with appropriate knots
+                let bezier_id = self.next_id();
+                let degree = if control_points.len() > 1 {
+                    (control_points.len() - 1).min(3) as i32
+                } else {
+                    0
+                };
+                
+                // For now, approximate as line
+                let line_id = self.next_id();
+                let dir_id = self.next_id();
+                
+                let dx = e.end.point[0] - e.start.point[0];
+                let dy = e.end.point[1] - e.start.point[1];
+                let dz = e.end.point[2] - e.start.point[2];
+                
+                let dir_entity = format!(
+                    "#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));",
+                    dir_id, dx, dy, dz
+                );
+                self.entities.push(dir_entity);
+                
+                let line_entity = format!(
+                    "#{} = LINE('', #{}, #{});",
+                    line_id, start_pt_id, dir_id
+                );
+                self.entities.push(line_entity);
+                line_id
+            }
             CurveType::BSpline { .. } => {
                 // For now, treat B-spline as a line approximation
                 let line_id = self.next_id();
