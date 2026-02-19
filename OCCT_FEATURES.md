@@ -54,7 +54,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Shell
 - [x] Solid
 - [x] Compound
-- [ ] CompSolid
+- [x] CompSolid
 
 ### 2.5 Topological Operations
 - [x] Adjacent faces query

@@ -68,6 +68,212 @@ pub fn make_hole(
     cut(solid, &hole_cylinder)
 }
 
+/// Create a countersunk hole in a solid
+///
+/// # Arguments
+/// * `solid` - The input solid to modify
+/// * `center` - 3D coordinates of the hole center (at the surface)
+/// * `direction` - Normal vector of the hole axis (will be normalized)
+/// * `hole_diameter` - Diameter of the main cylindrical hole (must be > 0)
+/// * `countersink_diameter` - Diameter of the countersink opening (must be >= hole_diameter)
+/// * `countersink_angle` - Angle of the countersink cone in degrees (typical: 82-120°)
+/// * `depth` - Total depth of the hole including countersink (must be > 0)
+///
+/// # Returns
+/// A new Solid with a countersunk hole cut through it
+///
+/// # Implementation
+/// 1. Creates a cylinder for the main hole
+/// 2. Creates a cone for the countersink with the specified angle
+/// 3. Combines both geometries with boolean union
+/// 4. Positions the combined geometry at the hole center
+/// 5. Uses boolean cut operation to remove material
+///
+/// # Notes
+/// - The countersink is a conical depression at the surface
+/// - Depth extends from the surface downward along the direction
+/// - The cone angle is the full angle of the countersink
+///
+/// # Example
+/// ```ignore
+/// let countersunk = make_hole_countersunk(
+///     &solid,
+///     [5.0, 5.0, 0.0],
+///     [0.0, 0.0, 1.0],
+///     5.0,      // main hole diameter
+///     8.0,      // countersink diameter
+///     90.0,     // countersink angle
+///     10.0      // total depth
+/// )?;
+/// ```
+pub fn make_hole_countersunk(
+    solid: &Solid,
+    center: [f64; 3],
+    direction: [f64; 3],
+    hole_diameter: f64,
+    countersink_diameter: f64,
+    countersink_angle: f64,
+    depth: f64,
+) -> Result<Solid> {
+    // Validate inputs
+    if hole_diameter <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Hole diameter must be positive, got {}", hole_diameter),
+        ));
+    }
+
+    if countersink_diameter < hole_diameter {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Countersink diameter ({}) must be >= hole diameter ({})",
+                countersink_diameter, hole_diameter),
+        ));
+    }
+
+    if countersink_angle <= 0.0 || countersink_angle >= 180.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Countersink angle must be between 0 and 180 degrees, got {}", countersink_angle),
+        ));
+    }
+
+    if depth <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Hole depth must be positive, got {}", depth),
+        ));
+    }
+
+    // Normalize direction vector
+    let dir_norm = normalize_vector(&direction)?;
+
+    // Create main hole cylinder
+    let hole_radius = hole_diameter / 2.0;
+    let mut hole_cylinder = make_cylinder(hole_radius, depth)?;
+
+    // Create countersink cone
+    // Half angle of the cone in radians (full angle / 2)
+    let half_angle_rad = (countersink_angle / 2.0).to_radians();
+    
+    // Calculate cone depth from the countersink angle
+    // For a cone: tan(half_angle) = countersink_radius / cone_depth
+    let countersink_radius = countersink_diameter / 2.0;
+    let cone_depth = countersink_radius / half_angle_rad.tan();
+    
+    // The cone should extend from surface to the point where it meets the main hole
+    // Cap the cone depth to not exceed total depth
+    let actual_cone_depth = cone_depth.min(depth);
+    
+    use crate::primitive::make_cone;
+    let mut countersink_cone = make_cone(countersink_radius, 0.0, actual_cone_depth)?;
+
+    // Combine hole and countersink using boolean union
+    // This creates a single solid to subtract
+    use crate::boolean::fuse;
+    let mut hole_with_countersink = fuse(&hole_cylinder, &countersink_cone)?;
+
+    // Position the combined hole geometry at the hole center
+    hole_with_countersink = position_solid_at_with_direction(&hole_with_countersink, &center, &dir_norm)?;
+
+    // Perform boolean cut: remove the hole from the solid
+    cut(solid, &hole_with_countersink)
+}
+
+/// Create a counterbore hole in a solid
+///
+/// # Arguments
+/// * `solid` - The input solid to modify
+/// * `center` - 3D coordinates of the hole center (at the counterbore opening)
+/// * `direction` - Normal vector of the hole axis (will be normalized)
+/// * `hole_diameter` - Diameter of the main cylindrical hole (must be > 0)
+/// * `counterbore_diameter` - Diameter of the counterbore opening (must be >= hole_diameter)
+/// * `counterbore_depth` - Depth of the counterbore cavity (must be > 0)
+/// * `hole_depth` - Total depth of the main hole below the counterbore (must be > 0)
+///
+/// # Returns
+/// A new Solid with a counterbore hole cut through it
+///
+/// # Implementation
+/// 1. Creates a cylinder for the main hole (smaller diameter)
+/// 2. Creates a cylinder for the counterbore (larger diameter)
+/// 3. Combines both cylinders with boolean union
+/// 4. Positions the combined geometry at the hole center
+/// 5. Uses boolean cut operation to remove material
+///
+/// # Notes
+/// - The counterbore is a stepped hole with two different diameters
+/// - counterbore_depth extends from the surface downward
+/// - hole_depth extends below the counterbore at the smaller diameter
+/// - Total depth = counterbore_depth + hole_depth
+///
+/// # Example
+/// ```ignore
+/// let counterbore = make_hole_counterbore(
+///     &solid,
+///     [5.0, 5.0, 0.0],
+///     [0.0, 0.0, 1.0],
+///     5.0,      // main hole diameter
+///     8.0,      // counterbore diameter
+///     3.0,      // counterbore depth
+///     7.0       // hole depth below counterbore
+/// )?;
+/// ```
+pub fn make_hole_counterbore(
+    solid: &Solid,
+    center: [f64; 3],
+    direction: [f64; 3],
+    hole_diameter: f64,
+    counterbore_diameter: f64,
+    counterbore_depth: f64,
+    hole_depth: f64,
+) -> Result<Solid> {
+    // Validate inputs
+    if hole_diameter <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Hole diameter must be positive, got {}", hole_diameter),
+        ));
+    }
+
+    if counterbore_diameter < hole_diameter {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Counterbore diameter ({}) must be >= hole diameter ({})",
+                counterbore_diameter, hole_diameter),
+        ));
+    }
+
+    if counterbore_depth <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Counterbore depth must be positive, got {}", counterbore_depth),
+        ));
+    }
+
+    if hole_depth <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            format!("Hole depth must be positive, got {}", hole_depth),
+        ));
+    }
+
+    // Normalize direction vector
+    let dir_norm = normalize_vector(&direction)?;
+
+    // Create main hole cylinder (extends through entire depth)
+    let hole_radius = hole_diameter / 2.0;
+    let total_depth = counterbore_depth + hole_depth;
+    let mut main_hole = make_cylinder(hole_radius, total_depth)?;
+
+    // Create counterbore cylinder (top portion only)
+    let counterbore_radius = counterbore_diameter / 2.0;
+    let mut counterbore_cylinder = make_cylinder(counterbore_radius, counterbore_depth)?;
+
+    // Combine the two cylinders using boolean union
+    // This creates a single stepped hole to subtract
+    use crate::boolean::fuse;
+    let mut hole_with_counterbore = fuse(&counterbore_cylinder, &main_hole)?;
+
+    // Position the combined hole geometry at the hole center
+    hole_with_counterbore = position_solid_at_with_direction(&hole_with_counterbore, &center, &dir_norm)?;
+
+    // Perform boolean cut: remove the hole from the solid
+    cut(solid, &hole_with_counterbore)
+}
+
 /// Create a rectangular slot in a solid
 ///
 /// # Arguments

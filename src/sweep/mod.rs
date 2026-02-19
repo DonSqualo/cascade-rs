@@ -562,6 +562,276 @@ fn compute_quad_normal(p0: &[f64; 3], p1: &[f64; 3], p2: &[f64; 3], p3: &[f64; 3
     normalize(&normal)
 }
 
+/// Draft prism - linear extrusion with taper angle (tapered extrusion)
+///
+/// Extrudes a 2D profile profile upward by a specified height while applying a draft angle.
+/// A draft angle creates a taper: faces are tilted from vertical.
+///
+/// # Arguments
+/// * `profile` - A 2D profile wire (should be a closed planar wire)
+/// * `direction` - Direction vector for extrusion (defines "up")
+/// * `height` - Extrusion height (must be positive)
+/// * `draft_angle` - Taper angle in radians
+///   - Positive angle: outward taper (profile grows larger)
+///   - Negative angle: inward taper (profile shrinks)
+///
+/// # Returns
+/// A Solid representing the tapered extrusion
+///
+/// # Algorithm
+/// 1. Create a face from the input wire (base profile)
+/// 2. Calculate the scale factor at the top based on draft_angle and height
+/// 3. Create a top profile scaled/offset based on the taper
+/// 4. Create tapered side faces connecting base and top
+/// 5. Assemble into a solid
+///
+/// # Example
+/// ```ignore
+/// // Create a square profile
+/// let profile = create_square_wire(1.0)?;
+/// // Extrude upward 10 units with 5-degree outward taper
+/// let draft_angle = 5.0 * std::f64::consts::PI / 180.0;
+/// let solid = make_draft_prism(&profile, &[0.0, 0.0, 1.0], 10.0, draft_angle)?;
+/// ```
+pub fn make_draft_prism(
+    profile: &Wire,
+    direction: &[f64; 3],
+    height: f64,
+    draft_angle: f64,
+) -> crate::Result<Solid> {
+    if height <= 0.0 {
+        return Err(crate::CascadeError::InvalidGeometry(
+            "Extrusion height must be positive".into()
+        ));
+    }
+
+    if profile.edges.is_empty() {
+        return Err(crate::CascadeError::InvalidGeometry(
+            "Profile wire must have at least one edge".into()
+        ));
+    }
+
+    let dir_norm = normalize(direction);
+    
+    // Calculate extrusion offset
+    let offset = [
+        dir_norm[0] * height,
+        dir_norm[1] * height,
+        dir_norm[2] * height,
+    ];
+    
+    // Find the center of the profile to use as reference for scaling
+    let center = calculate_wire_center(profile);
+    
+    // Calculate scale factor based on draft angle
+    // For a draft angle θ and height h:
+    // The horizontal offset from vertical is: h * tan(θ)
+    // This changes the scale of the profile
+    let horizontal_offset = height * draft_angle.tan();
+    
+    // The scale factor at the top is determined by:
+    // new_size = original_size + 2 * horizontal_offset
+    // This is because both sides expand/contract
+    let scale_factor = 1.0 + (2.0 * horizontal_offset) / calculate_wire_characteristic_size(profile);
+    
+    // Create base face from profile
+    let base_face = Face {
+        outer_wire: profile.clone(),
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: center,
+            normal: dir_norm,
+        },
+    };
+    
+    // Create top profile: translate + scale
+    let top_wire = scale_and_translate_wire(profile, &center, scale_factor, &offset)?;
+    
+    let top_face = Face {
+        outer_wire: top_wire.clone(),
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]],
+            normal: dir_norm,
+        },
+    };
+    
+    // Create tapered side faces
+    let side_faces = create_tapered_faces(&profile, &top_wire, &center, &offset, draft_angle)?;
+    
+    // Assemble the solid
+    let mut faces = vec![base_face];
+    faces.extend(side_faces);
+    faces.push(top_face);
+    
+    let shell = Shell { faces, closed: true };
+    Ok(Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    })
+}
+
+/// Helper: Calculate the geometric center of a wire
+fn calculate_wire_center(wire: &Wire) -> [f64; 3] {
+    if wire.edges.is_empty() {
+        return [0.0, 0.0, 0.0];
+    }
+
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_z = 0.0;
+    let mut count = 0;
+
+    for edge in &wire.edges {
+        sum_x += edge.start.point[0];
+        sum_y += edge.start.point[1];
+        sum_z += edge.start.point[2];
+        count += 1;
+    }
+
+    [
+        sum_x / count as f64,
+        sum_y / count as f64,
+        sum_z / count as f64,
+    ]
+}
+
+/// Helper: Calculate characteristic size (radius) of a wire
+fn calculate_wire_characteristic_size(wire: &Wire) -> f64 {
+    let center = calculate_wire_center(wire);
+    
+    let mut max_dist = 0.0;
+    for edge in &wire.edges {
+        let dx = edge.start.point[0] - center[0];
+        let dy = edge.start.point[1] - center[1];
+        let dz = edge.start.point[2] - center[2];
+        let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+        max_dist = max_dist.max(dist);
+    }
+
+    max_dist.max(1.0) // Avoid division by zero
+}
+
+/// Helper: Scale and translate a wire for the top profile
+fn scale_and_translate_wire(
+    wire: &Wire,
+    center: &[f64; 3],
+    scale_factor: f64,
+    offset: &[f64; 3],
+) -> crate::Result<Wire> {
+    let mut scaled_edges = vec![];
+
+    for edge in &wire.edges {
+        let start_scaled = scale_point_around_center(&edge.start.point, center, scale_factor);
+        let end_scaled = scale_point_around_center(&edge.end.point, center, scale_factor);
+
+        let start_translated = [
+            start_scaled[0] + offset[0],
+            start_scaled[1] + offset[1],
+            start_scaled[2] + offset[2],
+        ];
+
+        let end_translated = [
+            end_scaled[0] + offset[0],
+            end_scaled[1] + offset[1],
+            end_scaled[2] + offset[2],
+        ];
+
+        scaled_edges.push(Edge {
+            start: Vertex::new(start_translated[0], start_translated[1], start_translated[2]),
+            end: Vertex::new(end_translated[0], end_translated[1], end_translated[2]),
+            curve_type: edge.curve_type.clone(),
+        });
+    }
+
+    Ok(Wire {
+        edges: scaled_edges,
+        closed: wire.closed,
+    })
+}
+
+/// Helper: Scale a point around a center
+fn scale_point_around_center(point: &[f64; 3], center: &[f64; 3], scale: f64) -> [f64; 3] {
+    [
+        center[0] + (point[0] - center[0]) * scale,
+        center[1] + (point[1] - center[1]) * scale,
+        center[2] + (point[2] - center[2]) * scale,
+    ]
+}
+
+/// Helper: Create tapered side faces connecting base and top profiles
+fn create_tapered_faces(
+    base_wire: &Wire,
+    top_wire: &Wire,
+    center: &[f64; 3],
+    offset: &[f64; 3],
+    _draft_angle: f64,
+) -> crate::Result<Vec<Face>> {
+    let mut faces = vec![];
+
+    let base_edges = &base_wire.edges;
+    let top_edges = &top_wire.edges;
+
+    if base_edges.len() != top_edges.len() {
+        return Err(crate::CascadeError::InvalidGeometry(
+            "Base and top profiles must have the same number of edges".into()
+        ));
+    }
+
+    for i in 0..base_edges.len() {
+        let base_edge = &base_edges[i];
+        let top_edge = &top_edges[i];
+
+        // Create a tapered side face as a quad
+        let v0 = base_edge.start.clone();
+        let v1 = base_edge.end.clone();
+        let v2 = top_edge.end.clone();
+        let v3 = top_edge.start.clone();
+
+        let face_wire = Wire {
+            edges: vec![
+                Edge {
+                    start: v0.clone(),
+                    end: v1.clone(),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: v1.clone(),
+                    end: v2.clone(),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: v2.clone(),
+                    end: v3.clone(),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: v3.clone(),
+                    end: v0.clone(),
+                    curve_type: CurveType::Line,
+                },
+            ],
+            closed: true,
+        };
+
+        // Compute normal for the tapered face
+        let normal = compute_quad_normal(&v0.point, &v1.point, &v2.point, &v3.point);
+
+        let face = Face {
+            outer_wire: face_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: v0.point,
+                normal,
+            },
+        };
+
+        faces.push(face);
+    }
+
+    Ok(faces)
+}
+
 /// Revol sweep - rotates a 2D profile around an axis
 /// 
 /// # Arguments
