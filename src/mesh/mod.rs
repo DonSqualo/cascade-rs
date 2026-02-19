@@ -62,8 +62,27 @@ fn triangulate_face(
         SurfaceType::Torus { center, major_radius, minor_radius } => {
             triangulate_toroidal_face(face, center, *major_radius, *minor_radius, tolerance, vertices, normals, triangles)?;
         }
-        SurfaceType::BSpline { .. } => {
-            return Err(CascadeError::NotImplemented("BSpline surface triangulation".into()));
+        SurfaceType::BSpline {
+            u_degree,
+            v_degree,
+            u_knots,
+            v_knots,
+            control_points,
+            weights,
+        } => {
+            triangulate_bspline_face(
+                face,
+                *u_degree,
+                *v_degree,
+                u_knots,
+                v_knots,
+                control_points,
+                weights.as_ref(),
+                tolerance,
+                vertices,
+                normals,
+                triangles,
+            )?;
         }
     }
     Ok(())
@@ -402,6 +421,88 @@ fn triangulate_toroidal_face(
             let v1 = base_idx + u * (minor_subdivisions + 1) + v_next;
             let v2 = base_idx + (u + 1) * (minor_subdivisions + 1) + v;
             let v3 = base_idx + (u + 1) * (minor_subdivisions + 1) + v_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a BSpline surface face
+fn triangulate_bspline_face(
+    _face: &Face,
+    u_degree: usize,
+    v_degree: usize,
+    u_knots: &[f64],
+    v_knots: &[f64],
+    control_points: &[Vec<[f64; 3]>],
+    weights: Option<&Vec<Vec<f64>>>,
+    tolerance: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    // Get knot span ranges
+    let u_min = *u_knots.first().unwrap_or(&0.0);
+    let u_max = *u_knots.last().unwrap_or(&1.0);
+    let v_min = *v_knots.first().unwrap_or(&0.0);
+    let v_max = *v_knots.last().unwrap_or(&1.0);
+    
+    // Estimate subdivisions based on control point density and tolerance
+    // Use at least 4 subdivisions per direction, more if needed for accuracy
+    let u_subdivisions = ((control_points.len() as f64).sqrt().ceil() as usize * 2).max(4);
+    let v_subdivisions = if control_points.is_empty() {
+        4
+    } else {
+        ((control_points[0].len() as f64).sqrt().ceil() as usize * 2).max(4)
+    };
+    
+    let base_idx = vertices.len();
+    
+    // Create vertex grid
+    for u_idx in 0..=u_subdivisions {
+        let u = u_min + (u_idx as f64) / (u_subdivisions as f64) * (u_max - u_min);
+        
+        for v_idx in 0..=v_subdivisions {
+            let v = v_min + (v_idx as f64) / (v_subdivisions as f64) * (v_max - v_min);
+            
+            // Evaluate point on surface
+            let pt = crate::brep::SurfaceType::BSpline {
+                u_degree,
+                v_degree,
+                u_knots: u_knots.to_vec(),
+                v_knots: v_knots.to_vec(),
+                control_points: control_points.to_vec(),
+                weights: weights.map(|w| w.to_vec()),
+            }
+            .point_at(u, v);
+            
+            vertices.push(pt);
+            
+            // Evaluate normal on surface
+            let normal = crate::brep::SurfaceType::BSpline {
+                u_degree,
+                v_degree,
+                u_knots: u_knots.to_vec(),
+                v_knots: v_knots.to_vec(),
+                control_points: control_points.to_vec(),
+                weights: weights.map(|w| w.to_vec()),
+            }
+            .normal_at(u, v);
+            
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles by connecting grid points
+    for u_idx in 0..u_subdivisions {
+        for v_idx in 0..v_subdivisions {
+            let v0 = base_idx + u_idx * (v_subdivisions + 1) + v_idx;
+            let v1 = base_idx + u_idx * (v_subdivisions + 1) + v_idx + 1;
+            let v2 = base_idx + (u_idx + 1) * (v_subdivisions + 1) + v_idx;
+            let v3 = base_idx + (u_idx + 1) * (v_subdivisions + 1) + v_idx + 1;
             
             triangles.push([v0, v1, v2]);
             triangles.push([v1, v3, v2]);
