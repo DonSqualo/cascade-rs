@@ -74,7 +74,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Cone
 - [x] Torus
 - [x] Wedge/Prism
-- [ ] Half-space (infinite solid)
+- [x] Half-space (infinite solid)
 
 ### 3.2 Boolean Operations
 - [x] Fuse (union)
@@ -82,7 +82,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Common (intersection)
 - [x] Section (solid/plane)
 - [x] Splitter
-- [ ] Boolean with multiple arguments
+- [x] Boolean with multiple arguments
 - [ ] Fuzzy boolean (tolerance-based)
 
 ### 3.3 Sweeps & Extrusions
@@ -99,7 +99,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ### 3.5 Filleting & Chamfering
 - [x] Fillet (constant radius)
-- [ ] Fillet (variable radius)
+- [x] Fillet (variable radius)
 - [x] Chamfer (planar bevel)
 - [ ] Blend (rolling ball)
 
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-21 - Implemented Modifier (edit topology)*
+*Last updated: 2026-02-24 - Implemented Half-space primitive (infinite solid)*
