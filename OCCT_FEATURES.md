@@ -61,7 +61,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Connected edges query
 - [x] Shared edge query
 - [x] Face neighbors map
-- [ ] Explorer (iterate sub-shapes)
+- [x] Explorer (iterate sub-shapes)
 - [ ] Builder (construct topology)
 - [ ] Modifier (edit topology)
 
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-20 - Added gp_Pnt2d (2D point) and gp_Vec2d (2D vector)*
+*Last updated: 2026-02-20 - Implemented Explorer (iterate sub-shapes)*
