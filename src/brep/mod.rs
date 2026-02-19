@@ -4,6 +4,7 @@ pub mod topology;
 
 use nalgebra::Point3;
 use serde::{Deserialize, Serialize};
+use crate::{Result, CascadeError};
 
 /// A vertex in 3D space
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +50,28 @@ pub enum CurveType {
         y_dir: [f64; 3], 
         focal: f64 
     },
+    /// Hyperbola defined by center, axes, and semi-axis lengths
+    /// 
+    /// The hyperbola is defined parametrically as:
+    /// P(u) = center + a*cosh(u)*x_dir + b*sinh(u)*y_dir
+    /// 
+    /// - center: center of the hyperbola
+    /// - x_dir: direction along the transverse axis (toward vertices)
+    /// - y_dir: direction along the conjugate axis
+    /// - major_radius: semi-major axis length (a)
+    /// - minor_radius: semi-minor axis length (b)
+    /// 
+    /// Properties:
+    /// - Foci: center ± c*x_dir where c = sqrt(a² + b²)
+    /// - Eccentricity: e = c / a
+    /// - Asymptotes: direction vectors at ±(b/a) slope relative to x_dir
+    Hyperbola {
+        center: [f64; 3],
+        x_dir: [f64; 3],
+        y_dir: [f64; 3],
+        major_radius: f64,
+        minor_radius: f64,
+    },
     Bezier { control_points: Vec<[f64; 3]> },
     BSpline { control_points: Vec<[f64; 3]>, knots: Vec<f64>, degree: usize, weights: Option<Vec<f64>> },
     /// A bounded portion of an underlying curve defined by parameter limits
@@ -62,6 +85,21 @@ pub enum CurveType {
         u1: f64, 
         /// Second parameter (end of trimmed portion)
         u2: f64 
+    },
+    /// An offset curve is a curve displaced by a constant distance in a given direction
+    /// 
+    /// For 2D curves: the offset is perpendicular to the curve
+    /// For 3D curves: the offset lies in the plane defined by the curve tangent and a reference direction
+    /// 
+    /// The basis curve is offset by moving each point along the normal direction.
+    Offset {
+        /// The underlying basis curve
+        basis_curve: Box<CurveType>,
+        /// The distance to offset (positive or negative)
+        offset_distance: f64,
+        /// Reference direction for 3D offset (defines the plane with the tangent)
+        /// For 2D curves, this can be the Z-axis or any direction; the perpendicular direction is computed automatically
+        offset_direction: [f64; 3],
     },
 }
 
@@ -87,6 +125,20 @@ pub enum SurfaceType {
     Sphere { center: [f64; 3], radius: f64 },
     Cone { origin: [f64; 3], axis: [f64; 3], half_angle_rad: f64 },
     Torus { center: [f64; 3], major_radius: f64, minor_radius: f64 },
+    /// Bezier surface defined by a 2D grid of control points
+    /// 
+    /// The surface is evaluated using de Casteljau's algorithm:
+    /// S(u, v) = Σ Σ B_{i,u_degree}(u) * B_{j,v_degree}(v) * P_{i,j}
+    /// 
+    /// where B are Bernstein polynomials and P_{i,j} are control points
+    BezierSurface {
+        /// 2D grid of control points [i][j]
+        control_points: Vec<Vec<[f64; 3]>>,
+        /// Degree in U direction (= number of control points in U - 1)
+        u_degree: usize,
+        /// Degree in V direction (= number of control points in V - 1)
+        v_degree: usize,
+    },
     BSpline {
         u_degree: usize,
         v_degree: usize,
@@ -109,6 +161,20 @@ pub enum SurfaceType {
         axis_location: [f64; 3],
         /// Direction of the axis of revolution (will be normalized)
         axis_direction: [f64; 3],
+    },
+    /// Surface of linear extrusion - created by sweeping a curve along a direction vector
+    /// u parameter: curve parameter (0 to 1)
+    /// v parameter: extrusion distance (scalar multiple along direction)
+    /// Parametric equation: P(u,v) = C(u) + v*direction
+    SurfaceOfLinearExtrusion {
+        /// The generatrix curve being extruded
+        basis_curve: CurveType,
+        /// Start point of the basis curve (needed for Line evaluation)
+        curve_start: [f64; 3],
+        /// End point of the basis curve (needed for Line evaluation)
+        curve_end: [f64; 3],
+        /// Direction vector of extrusion (will be normalized for distances)
+        direction: [f64; 3],
     },
 }
 
@@ -168,6 +234,13 @@ impl SurfaceType {
                 // Return center as placeholder - full implementation TODO
                 *center
             }
+            SurfaceType::BezierSurface {
+                control_points,
+                u_degree,
+                v_degree,
+            } => {
+                evaluate_bezier_surface(u, v, *u_degree, *v_degree, control_points)
+            }
             SurfaceType::BSpline {
                 u_degree,
                 v_degree,
@@ -192,6 +265,20 @@ impl SurfaceType {
                     curve_end,
                     axis_location,
                     axis_direction,
+                )
+            }
+            SurfaceType::SurfaceOfLinearExtrusion {
+                basis_curve,
+                curve_start,
+                curve_end,
+                direction,
+            } => {
+                evaluate_surface_of_linear_extrusion(
+                    u, v,
+                    basis_curve,
+                    curve_start,
+                    curve_end,
+                    direction,
                 )
             }
         }
@@ -261,6 +348,13 @@ impl SurfaceType {
                 ];
                 normalize(&normal)
             }
+            SurfaceType::BezierSurface {
+                control_points,
+                u_degree,
+                v_degree,
+            } => {
+                bezier_surface_normal(u, v, *u_degree, *v_degree, control_points)
+            }
             SurfaceType::BSpline {
                 u_degree,
                 v_degree,
@@ -287,6 +381,20 @@ impl SurfaceType {
                     axis_direction,
                 )
             }
+            SurfaceType::SurfaceOfLinearExtrusion {
+                basis_curve,
+                curve_start,
+                curve_end,
+                direction,
+            } => {
+                surface_of_linear_extrusion_normal(
+                    u, v,
+                    basis_curve,
+                    curve_start,
+                    curve_end,
+                    direction,
+                )
+            }
         }
     }
 }
@@ -306,6 +414,104 @@ impl SurfaceType {
             curve_end,
             axis_location,
             axis_direction,
+        }
+    }
+    
+    /// Create a SurfaceOfLinearExtrusion from a basis curve and extrusion direction
+    pub fn linear_extrusion(
+        basis_curve: CurveType,
+        curve_start: [f64; 3],
+        curve_end: [f64; 3],
+        direction: [f64; 3],
+    ) -> Self {
+        SurfaceType::SurfaceOfLinearExtrusion {
+            basis_curve,
+            curve_start,
+            curve_end,
+            direction,
+        }
+    }
+    
+    /// Create a Bezier surface from a 2D grid of control points
+    /// 
+    /// # Arguments
+    /// * `control_points` - 2D grid of control points [i][j]
+    ///   The dimensions determine the degrees: u_degree = num_rows - 1, v_degree = num_cols - 1
+    pub fn bezier(control_points: Vec<Vec<[f64; 3]>>) -> Result<Self> {
+        if control_points.is_empty() || control_points[0].is_empty() {
+            return Err(CascadeError::InvalidGeometry(
+                "Bezier surface requires at least a 1x1 grid of control points".to_string()
+            ));
+        }
+        
+        let u_degree = control_points.len() - 1;
+        let v_degree = control_points[0].len() - 1;
+        
+        Ok(SurfaceType::BezierSurface {
+            control_points,
+            u_degree,
+            v_degree,
+        })
+    }
+    
+    /// Get the basis curve of a surface of linear extrusion
+    /// Returns None if this is not a SurfaceOfLinearExtrusion
+    pub fn basis_curve(&self) -> Option<&CurveType> {
+        match self {
+            SurfaceType::SurfaceOfLinearExtrusion { basis_curve, .. } => Some(basis_curve),
+            SurfaceType::SurfaceOfRevolution { basis_curve, .. } => Some(basis_curve),
+            _ => None,
+        }
+    }
+    
+    /// Get the extrusion direction of a surface of linear extrusion
+    /// Returns None if this is not a SurfaceOfLinearExtrusion
+    pub fn extrusion_direction(&self) -> Option<[f64; 3]> {
+        match self {
+            SurfaceType::SurfaceOfLinearExtrusion { direction, .. } => Some(*direction),
+            _ => None,
+        }
+    }
+    
+    /// Get a control point from a Bezier surface
+    /// Returns None if this is not a Bezier surface or indices are out of bounds
+    pub fn control_point(&self, i: usize, j: usize) -> Option<[f64; 3]> {
+        match self {
+            SurfaceType::BezierSurface { control_points, .. } => {
+                if i < control_points.len() && j < control_points[i].len() {
+                    Some(control_points[i][j])
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+    
+    /// Get the degree in U direction of a Bezier surface
+    /// Returns None if this is not a Bezier surface
+    pub fn degree_u(&self) -> Option<usize> {
+        match self {
+            SurfaceType::BezierSurface { u_degree, .. } => Some(*u_degree),
+            _ => None,
+        }
+    }
+    
+    /// Get the degree in V direction of a Bezier surface
+    /// Returns None if this is not a Bezier surface
+    pub fn degree_v(&self) -> Option<usize> {
+        match self {
+            SurfaceType::BezierSurface { v_degree, .. } => Some(*v_degree),
+            _ => None,
+        }
+    }
+    
+    /// Get all control points of a Bezier surface
+    /// Returns None if this is not a Bezier surface
+    pub fn control_points(&self) -> Option<&Vec<Vec<[f64; 3]>>> {
+        match self {
+            SurfaceType::BezierSurface { control_points, .. } => Some(control_points),
+            _ => None,
         }
     }
 }
@@ -609,6 +815,24 @@ fn evaluate_basis_curve(
             let u = u1 + t * (u2 - u1);
             evaluate_basis_curve(basis_curve, start, end, u)
         }
+        CurveType::Offset { .. } => {
+            // Offset curve: for now, fallback to linear interpolation
+            // TODO: Implement proper offset curve evaluation
+            [
+                start[0] + t * (end[0] - start[0]),
+                start[1] + t * (end[1] - start[1]),
+                start[2] + t * (end[2] - start[2]),
+            ]
+        }
+        CurveType::Hyperbola { .. } => {
+            // Hyperbola curve: for now, fallback to linear interpolation
+            // TODO: Implement proper hyperbola curve evaluation
+            [
+                start[0] + t * (end[0] - start[0]),
+                start[1] + t * (end[1] - start[1]),
+                start[2] + t * (end[2] - start[2]),
+            ]
+        }
     }
 }
 
@@ -770,6 +994,175 @@ fn surface_of_revolution_normal(
     let pt_v_minus = evaluate_surface_of_revolution(
         u, v - delta,
         basis_curve, curve_start, curve_end, axis_location, axis_direction
+    );
+    let tangent_v = [
+        pt_v_plus[0] - pt_v_minus[0],
+        pt_v_plus[1] - pt_v_minus[1],
+        pt_v_plus[2] - pt_v_minus[2],
+    ];
+    
+    // Normal is cross product of tangent vectors
+    let normal = cross(&tangent_u, &tangent_v);
+    normalize(&normal)
+}
+
+// ===== Surface of Linear Extrusion Functions =====
+
+/// Evaluate a point on a surface of linear extrusion
+/// u: curve parameter [0, 1]
+/// v: extrusion distance (scalar multiple along direction)
+/// 
+/// Parametric equation: P(u,v) = C(u) + v*direction
+fn evaluate_surface_of_linear_extrusion(
+    u: f64,
+    v: f64,
+    basis_curve: &CurveType,
+    curve_start: &[f64; 3],
+    curve_end: &[f64; 3],
+    direction: &[f64; 3],
+) -> [f64; 3] {
+    // Get point on basis curve at parameter u
+    let curve_point = evaluate_basis_curve(basis_curve, curve_start, curve_end, u);
+    
+    // Add the extrusion: P = C(u) + v*direction
+    [
+        curve_point[0] + v * direction[0],
+        curve_point[1] + v * direction[1],
+        curve_point[2] + v * direction[2],
+    ]
+}
+
+/// Compute normal for a surface of linear extrusion using finite differences
+fn surface_of_linear_extrusion_normal(
+    u: f64,
+    v: f64,
+    basis_curve: &CurveType,
+    curve_start: &[f64; 3],
+    curve_end: &[f64; 3],
+    direction: &[f64; 3],
+) -> [f64; 3] {
+    let delta = 1e-5;
+    
+    // Compute tangent vectors using finite differences
+    let pt_u_plus = evaluate_surface_of_linear_extrusion(
+        (u + delta).min(1.0), v,
+        basis_curve, curve_start, curve_end, direction
+    );
+    let pt_u_minus = evaluate_surface_of_linear_extrusion(
+        (u - delta).max(0.0), v,
+        basis_curve, curve_start, curve_end, direction
+    );
+    let tangent_u = [
+        pt_u_plus[0] - pt_u_minus[0],
+        pt_u_plus[1] - pt_u_minus[1],
+        pt_u_plus[2] - pt_u_minus[2],
+    ];
+    
+    // For linear extrusion, tangent in v direction is just the direction vector
+    let tangent_v = *direction;
+    
+    // Normal is cross product of tangent vectors
+    let normal = cross(&tangent_u, &tangent_v);
+    normalize(&normal)
+}
+
+// ===== Bezier Surface Functions =====
+
+/// Compute Bernstein polynomial basis B_{n,i}(t) = C(n,i) * (1-t)^(n-i) * t^i
+/// where C(n,i) is the binomial coefficient
+fn bernstein_basis(n: usize, i: usize, t: f64) -> f64 {
+    if i > n {
+        return 0.0;
+    }
+    
+    // Compute binomial coefficient C(n, i)
+    let binom = if i == 0 || i == n {
+        1.0
+    } else {
+        let mut coeff = 1.0;
+        for k in 0..i {
+            coeff *= (n - k) as f64 / (k + 1) as f64;
+        }
+        coeff
+    };
+    
+    let one_minus_t = 1.0 - t;
+    binom * one_minus_t.powi((n - i) as i32) * t.powi(i as i32)
+}
+
+/// Evaluate a point on a Bezier surface using de Casteljau's algorithm
+/// 
+/// Surface is defined by:
+/// S(u, v) = Σ Σ B_{m,i}(u) * B_{n,j}(v) * P_{i,j}
+/// 
+/// where:
+/// - P_{i,j} are the 2D grid of control points
+/// - B are Bernstein basis functions
+/// - m = u_degree, n = v_degree
+fn evaluate_bezier_surface(
+    u: f64,
+    v: f64,
+    u_degree: usize,
+    v_degree: usize,
+    control_points: &[Vec<[f64; 3]>],
+) -> [f64; 3] {
+    if control_points.is_empty() || control_points[0].is_empty() {
+        return [0.0, 0.0, 0.0];
+    }
+    
+    // Evaluate using tensor product of Bernstein polynomials
+    let mut point = [0.0; 3];
+    
+    for i in 0..=u_degree {
+        for j in 0..=v_degree {
+            if i < control_points.len() && j < control_points[i].len() {
+                let b_u = bernstein_basis(u_degree, i, u);
+                let b_v = bernstein_basis(v_degree, j, v);
+                let basis = b_u * b_v;
+                
+                let cp = control_points[i][j];
+                point[0] += basis * cp[0];
+                point[1] += basis * cp[1];
+                point[2] += basis * cp[2];
+            }
+        }
+    }
+    
+    point
+}
+
+/// Compute normal to a Bezier surface using finite differences
+fn bezier_surface_normal(
+    u: f64,
+    v: f64,
+    u_degree: usize,
+    v_degree: usize,
+    control_points: &[Vec<[f64; 3]>],
+) -> [f64; 3] {
+    let delta = 1e-5;
+    
+    // Compute tangent vectors using finite differences
+    let pt_u_plus = evaluate_bezier_surface(
+        (u + delta).min(1.0), v,
+        u_degree, v_degree, control_points
+    );
+    let pt_u_minus = evaluate_bezier_surface(
+        (u - delta).max(0.0), v,
+        u_degree, v_degree, control_points
+    );
+    let tangent_u = [
+        pt_u_plus[0] - pt_u_minus[0],
+        pt_u_plus[1] - pt_u_minus[1],
+        pt_u_plus[2] - pt_u_minus[2],
+    ];
+    
+    let pt_v_plus = evaluate_bezier_surface(
+        u, (v + delta).min(1.0),
+        u_degree, v_degree, control_points
+    );
+    let pt_v_minus = evaluate_bezier_surface(
+        u, (v - delta).max(0.0),
+        u_degree, v_degree, control_points
     );
     let tangent_v = [
         pt_v_plus[0] - pt_v_minus[0],

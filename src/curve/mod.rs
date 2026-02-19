@@ -2,6 +2,30 @@
 
 use crate::{Result, CascadeError, brep::CurveType};
 
+/// Helper function to normalize a 3D vector
+fn normalize(v: &[f64; 3]) -> [f64; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if len < 1e-10 {
+        [0.0, 0.0, 0.0]
+    } else {
+        [v[0] / len, v[1] / len, v[2] / len]
+    }
+}
+
+/// Helper function to compute cross product
+fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// Helper function to compute dot product
+fn dot(a: &[f64; 3], b: &[f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
 /// A trimmed curve is a bounded portion of an underlying curve
 /// defined by parameter limits [u1, u2].
 /// 
@@ -297,6 +321,207 @@ impl Parabola {
     }
 }
 
+/// A hyperbola in 3D space
+/// 
+/// Defined by a center, two perpendicular axes, and semi-axis lengths (major_radius and minor_radius).
+/// The hyperbola lies in the plane defined by the x_dir and y_dir, with center at the origin position.
+/// 
+/// # Parametric Equation
+/// 
+/// P(u) = center + major_radius * cosh(u) * x_dir + minor_radius * sinh(u) * y_dir
+/// 
+/// where:
+/// - cosh(u) = (e^u + e^(-u)) / 2
+/// - sinh(u) = (e^u - e^(-u)) / 2
+/// 
+/// # Geometric Properties
+/// 
+/// - Center: at the origin position
+/// - Foci: at center ± c * x_dir, where c = sqrt(major_radius² + minor_radius²)
+/// - Eccentricity: e = c / major_radius
+/// - Asymptotes: lines through center with slopes ±(minor_radius / major_radius)
+/// - The right branch (u > 0) and left branch (u < 0) form the two parts of the hyperbola
+#[derive(Debug, Clone)]
+pub struct Hyperbola {
+    /// Center of the hyperbola
+    pub center: [f64; 3],
+    /// X direction (along the transverse axis, toward the vertices)
+    pub x_dir: [f64; 3],
+    /// Y direction (perpendicular to x_dir, in the plane of the hyperbola)
+    pub y_dir: [f64; 3],
+    /// Semi-major axis length (a) - distance from center to vertex along transverse axis
+    pub major_radius: f64,
+    /// Semi-minor axis length (b) - determines the asymptotic slope
+    pub minor_radius: f64,
+}
+
+impl Hyperbola {
+    /// Create a new hyperbola from center, axes directions, and semi-axis lengths
+    /// 
+    /// # Arguments
+    /// * `center` - Center of the hyperbola
+    /// * `x_dir` - Direction along the transverse axis (should be unit vector)
+    /// * `y_dir` - Direction along the conjugate axis (should be unit vector)
+    /// * `major_radius` - Semi-major axis length (a), must be positive
+    /// * `minor_radius` - Semi-minor axis length (b), must be positive
+    pub fn new(
+        center: [f64; 3],
+        x_dir: [f64; 3],
+        y_dir: [f64; 3],
+        major_radius: f64,
+        minor_radius: f64,
+    ) -> Result<Self> {
+        if major_radius.abs() < 1e-10 {
+            return Err(CascadeError::InvalidGeometry(
+                "Major radius must be non-zero".to_string(),
+            ));
+        }
+        if minor_radius.abs() < 1e-10 {
+            return Err(CascadeError::InvalidGeometry(
+                "Minor radius must be non-zero".to_string(),
+            ));
+        }
+        
+        Ok(Self {
+            center,
+            x_dir,
+            y_dir,
+            major_radius: major_radius.abs(),
+            minor_radius: minor_radius.abs(),
+        })
+    }
+    
+    /// Create a standard hyperbola in the XY plane centered at origin
+    /// 
+    /// Standard hyperbola: x²/a² - y²/b² = 1
+    /// Parametric: x = a*cosh(t), y = b*sinh(t)
+    pub fn standard(major_radius: f64, minor_radius: f64) -> Result<Self> {
+        Self::new(
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            major_radius,
+            minor_radius,
+        )
+    }
+    
+    /// Get the distance from center to focus (linear eccentricity)
+    /// 
+    /// c = sqrt(a² + b²)
+    fn focal_distance(&self) -> f64 {
+        (self.major_radius * self.major_radius + self.minor_radius * self.minor_radius).sqrt()
+    }
+    
+    /// Get the first focus (along positive x_dir)
+    /// 
+    /// Focus = center + focal_distance * x_dir
+    pub fn focus1(&self) -> [f64; 3] {
+        let c = self.focal_distance();
+        [
+            self.center[0] + c * self.x_dir[0],
+            self.center[1] + c * self.x_dir[1],
+            self.center[2] + c * self.x_dir[2],
+        ]
+    }
+    
+    /// Get the second focus (along negative x_dir)
+    /// 
+    /// Focus = center - focal_distance * x_dir
+    pub fn focus2(&self) -> [f64; 3] {
+        let c = self.focal_distance();
+        [
+            self.center[0] - c * self.x_dir[0],
+            self.center[1] - c * self.x_dir[1],
+            self.center[2] - c * self.x_dir[2],
+        ]
+    }
+    
+    /// Get the eccentricity
+    /// 
+    /// e = c / a = sqrt(1 + (b/a)²)
+    pub fn eccentricity(&self) -> f64 {
+        self.focal_distance() / self.major_radius
+    }
+    
+    /// Get the semi-major axis length (a)
+    pub fn parameter(&self) -> f64 {
+        self.major_radius
+    }
+    
+    /// Get the asymptotes as two lines through the center
+    /// 
+    /// Returns slopes in the form of two direction vectors
+    /// Asymptotes have slopes ±(b/a) relative to the x_dir
+    pub fn asymptotes(&self) -> ([f64; 3], [f64; 3]) {
+        // Asymptote 1: direction = x_dir + (b/a) * y_dir
+        let slope_ratio = self.minor_radius / self.major_radius;
+        let asym1 = [
+            self.x_dir[0] + slope_ratio * self.y_dir[0],
+            self.x_dir[1] + slope_ratio * self.y_dir[1],
+            self.x_dir[2] + slope_ratio * self.y_dir[2],
+        ];
+        
+        // Asymptote 2: direction = x_dir - (b/a) * y_dir
+        let asym2 = [
+            self.x_dir[0] - slope_ratio * self.y_dir[0],
+            self.x_dir[1] - slope_ratio * self.y_dir[1],
+            self.x_dir[2] - slope_ratio * self.y_dir[2],
+        ];
+        
+        (asym1, asym2)
+    }
+    
+    /// Evaluate a point on the hyperbola at parameter u
+    /// 
+    /// P(u) = center + a*cosh(u)*x_dir + b*sinh(u)*y_dir
+    pub fn point_at(&self, u: f64) -> [f64; 3] {
+        let cosh_u = u.cosh();
+        let sinh_u = u.sinh();
+        
+        let x_component = self.major_radius * cosh_u;
+        let y_component = self.minor_radius * sinh_u;
+        
+        [
+            self.center[0] + x_component * self.x_dir[0] + y_component * self.y_dir[0],
+            self.center[1] + x_component * self.x_dir[1] + y_component * self.y_dir[1],
+            self.center[2] + x_component * self.x_dir[2] + y_component * self.y_dir[2],
+        ]
+    }
+    
+    /// Evaluate the tangent vector at parameter u
+    /// 
+    /// dP/du = a*sinh(u)*x_dir + b*cosh(u)*y_dir
+    pub fn tangent_at(&self, u: f64) -> [f64; 3] {
+        let sinh_u = u.sinh();
+        let cosh_u = u.cosh();
+        
+        let x_component = self.major_radius * sinh_u;
+        let y_component = self.minor_radius * cosh_u;
+        
+        [
+            x_component * self.x_dir[0] + y_component * self.y_dir[0],
+            x_component * self.x_dir[1] + y_component * self.y_dir[1],
+            x_component * self.x_dir[2] + y_component * self.y_dir[2],
+        ]
+    }
+    
+    /// Convert to CurveType enum for use with edges
+    pub fn to_curve_type(&self) -> CurveType {
+        CurveType::Hyperbola {
+            center: self.center,
+            x_dir: self.x_dir,
+            y_dir: self.y_dir,
+            major_radius: self.major_radius,
+            minor_radius: self.minor_radius,
+        }
+    }
+    
+    /// Get the center of the hyperbola
+    pub fn center_point(&self) -> [f64; 3] {
+        self.center
+    }
+}
+
 /// Evaluate a curve at parameter t, returning a 3D point
 /// 
 /// t should typically be in [0, 1] for most curves
@@ -324,6 +549,9 @@ pub fn point_at(curve: &CurveType, t: f64) -> Result<[f64; 3]> {
         CurveType::Parabola { origin, x_dir, y_dir, focal } => {
             evaluate_parabola(origin, x_dir, y_dir, *focal, t)
         }
+        CurveType::Hyperbola { center, x_dir, y_dir, major_radius, minor_radius } => {
+            evaluate_hyperbola(center, x_dir, y_dir, *major_radius, *minor_radius, t)
+        }
         CurveType::Bezier { control_points } => {
             evaluate_bezier(control_points, t)
         }
@@ -334,6 +562,48 @@ pub fn point_at(curve: &CurveType, t: f64) -> Result<[f64; 3]> {
             // Map t ∈ [0, 1] to the trimmed parameter range [u1, u2]
             let mapped_t = *u1 + t * (*u2 - *u1);
             point_at(basis_curve, mapped_t)
+        }
+        CurveType::Offset { basis_curve, offset_distance, offset_direction } => {
+            // Evaluate the basis curve at the parameter
+            let basis_point = point_at(basis_curve, t)?;
+            let tangent = tangent_at(basis_curve, t)?;
+            
+            // Compute the offset normal
+            let tangent_norm = normalize(&tangent);
+            let offset_dir_norm = normalize(offset_direction);
+            
+            // Compute normal: cross product of offset_direction and tangent
+            let normal = cross(&offset_dir_norm, &tangent_norm);
+            let normal_len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+            
+            let final_normal = if normal_len > 1e-10 {
+                [normal[0] / normal_len, normal[1] / normal_len, normal[2] / normal_len]
+            } else {
+                // Fallback: try alternative perpendicular direction
+                let perp_dir = if offset_dir_norm[0].abs() < 0.9 {
+                    [0.0, 0.0, 1.0]
+                } else {
+                    [1.0, 0.0, 0.0]
+                };
+                
+                let normal2 = cross(&perp_dir, &tangent_norm);
+                let normal2_len = (normal2[0] * normal2[0] + normal2[1] * normal2[1] + normal2[2] * normal2[2]).sqrt();
+                
+                if normal2_len > 1e-10 {
+                    [normal2[0] / normal2_len, normal2[1] / normal2_len, normal2[2] / normal2_len]
+                } else {
+                    return Err(CascadeError::InvalidGeometry(
+                        "Cannot compute offset normal: no perpendicular direction found".to_string()
+                    ));
+                }
+            };
+            
+            // Offset the point
+            Ok([
+                basis_point[0] + offset_distance * final_normal[0],
+                basis_point[1] + offset_distance * final_normal[1],
+                basis_point[2] + offset_distance * final_normal[2],
+            ])
         }
     }
 }
@@ -355,6 +625,9 @@ pub fn tangent_at(curve: &CurveType, t: f64) -> Result<[f64; 3]> {
         CurveType::Parabola { origin, x_dir, y_dir, focal } => {
             tangent_parabola(x_dir, y_dir, *focal, t)
         }
+        CurveType::Hyperbola { center: _, x_dir, y_dir, major_radius, minor_radius } => {
+            tangent_hyperbola(x_dir, y_dir, *major_radius, *minor_radius, t)
+        }
         CurveType::Bezier { control_points } => {
             tangent_bezier(control_points, t)
         }
@@ -371,6 +644,11 @@ pub fn tangent_at(curve: &CurveType, t: f64) -> Result<[f64; 3]> {
             tang[1] *= scale;
             tang[2] *= scale;
             Ok(tang)
+        }
+        CurveType::Offset { basis_curve, offset_distance: _, offset_direction: _ } => {
+            // The tangent of an offset curve is parallel to the basis curve's tangent
+            // (offsetting doesn't change the direction, only the position)
+            tangent_at(basis_curve, t)
         }
     }
 }
@@ -435,6 +713,188 @@ fn tangent_arc(
     Ok([-sin_a * factor, cos_a * factor, 0.0])
 }
 
+/// An offset curve is a curve displaced by a constant distance in a given direction.
+/// 
+/// For 2D curves (curves that lie in a plane), the offset is perpendicular to the curve.
+/// For 3D curves, the offset is computed in the plane defined by the curve's tangent vector
+/// and a reference direction.
+/// 
+/// # Mathematical Definition
+/// 
+/// Given a basis curve C(u) and an offset distance d:
+/// - For 2D: The offset curve is C'(u) = C(u) + d * N(u), where N(u) is the unit normal perpendicular to the tangent
+/// - For 3D: The offset is computed using the plane formed by the tangent and reference direction
+#[derive(Debug, Clone)]
+pub struct OffsetCurve {
+    /// The underlying basis curve being offset
+    basis: CurveType,
+    /// The offset distance (can be positive or negative)
+    offset_distance: f64,
+    /// Reference direction for 3D offset (defines the plane with the tangent)
+    offset_direction: [f64; 3],
+}
+
+impl OffsetCurve {
+    /// Create a new offset curve from a basis curve and offset distance.
+    /// 
+    /// # Arguments
+    /// * `basis` - The underlying curve to offset
+    /// * `offset_distance` - The distance to offset (positive = outward, negative = inward)
+    /// * `offset_direction` - Reference direction for 3D offset (should be normalized)
+    /// 
+    /// # Returns
+    /// A new OffsetCurve or an error if the offset_distance is zero
+    pub fn new(basis: CurveType, offset_distance: f64, offset_direction: [f64; 3]) -> Result<Self> {
+        if offset_distance.abs() < 1e-10 {
+            return Err(CascadeError::InvalidGeometry(
+                "OffsetCurve: offset_distance must be non-zero".to_string()
+            ));
+        }
+        Ok(Self {
+            basis,
+            offset_distance,
+            offset_direction: normalize(&offset_direction),
+        })
+    }
+    
+    /// Get a reference to the underlying basis curve.
+    /// 
+    /// Corresponds to OpenCASCADE's Geom_OffsetCurve::BasisCurve()
+    pub fn basis_curve(&self) -> &CurveType {
+        &self.basis
+    }
+    
+    /// Get the offset distance.
+    /// 
+    /// Corresponds to OpenCASCADE's Geom_OffsetCurve::Offset()
+    pub fn offset(&self) -> f64 {
+        self.offset_distance
+    }
+    
+    /// Get the reference direction for 3D offset.
+    /// 
+    /// Corresponds to OpenCASCADE's Geom_OffsetCurve::Direction()
+    pub fn direction(&self) -> [f64; 3] {
+        self.offset_direction
+    }
+    
+    /// Evaluate a point on the offset curve at parameter t ∈ [0, 1].
+    /// 
+    /// Computes the point on the basis curve, then offsets it by the normal vector.
+    /// For 2D curves, the normal is perpendicular to the tangent in the plane.
+    /// For 3D curves, the normal is computed from the tangent and reference direction.
+    /// 
+    /// # Arguments
+    /// * `t` - Parameter in [0, 1]
+    /// 
+    /// # Returns
+    /// The 3D point on the offset curve at parameter t
+    pub fn point_at(&self, t: f64) -> Result<[f64; 3]> {
+        let basis_point = point_at(&self.basis, t)?;
+        let tangent = tangent_at(&self.basis, t)?;
+        
+        // Compute the normal vector for the offset
+        let normal = self.compute_offset_normal(&tangent)?;
+        
+        // Offset the point
+        Ok([
+            basis_point[0] + self.offset_distance * normal[0],
+            basis_point[1] + self.offset_distance * normal[1],
+            basis_point[2] + self.offset_distance * normal[2],
+        ])
+    }
+    
+    /// Evaluate the tangent vector at parameter t ∈ [0, 1].
+    /// 
+    /// For offset curves, the tangent is the same as the basis curve's tangent
+    /// (offsetting doesn't change the direction, only the position).
+    /// 
+    /// # Arguments
+    /// * `t` - Parameter in [0, 1]
+    /// 
+    /// # Returns
+    /// The tangent vector at parameter t (same direction as basis curve)
+    pub fn tangent_at(&self, t: f64) -> Result<[f64; 3]> {
+        // The tangent of an offset curve is parallel to the basis curve's tangent
+        tangent_at(&self.basis, t)
+    }
+    
+    /// Convert to a CurveType::Offset enum variant for storage in edges.
+    pub fn to_curve_type(&self) -> CurveType {
+        CurveType::Offset {
+            basis_curve: Box::new(self.basis.clone()),
+            offset_distance: self.offset_distance,
+            offset_direction: self.offset_direction,
+        }
+    }
+    
+    /// Create an OffsetCurve from a CurveType::Offset variant.
+    /// 
+    /// Returns None if the curve type is not Offset.
+    pub fn from_curve_type(curve: &CurveType) -> Option<Self> {
+        match curve {
+            CurveType::Offset { basis_curve, offset_distance, offset_direction } => {
+                Some(Self {
+                    basis: (**basis_curve).clone(),
+                    offset_distance: *offset_distance,
+                    offset_direction: *offset_direction,
+                })
+            }
+            _ => None,
+        }
+    }
+    
+    /// Compute the offset normal vector given a tangent vector.
+    /// 
+    /// For 2D curves (tangent in XY plane): normal is perpendicular in the XY plane
+    /// For 3D curves: normal is computed using the cross product of tangent and reference direction
+    fn compute_offset_normal(&self, tangent: &[f64; 3]) -> Result<[f64; 3]> {
+        let tangent_norm = normalize(tangent);
+        
+        // Check if tangent is nearly zero
+        if tangent_norm[0].abs() < 1e-10 && tangent_norm[1].abs() < 1e-10 && tangent_norm[2].abs() < 1e-10 {
+            return Err(CascadeError::InvalidGeometry(
+                "Cannot compute offset normal: tangent vector is zero".to_string()
+            ));
+        }
+        
+        // Compute normal: cross product of offset_direction and tangent
+        // This gives a normal in the plane defined by tangent and offset_direction
+        let normal = cross(&self.offset_direction, &tangent_norm);
+        let normal_len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        
+        if normal_len < 1e-10 {
+            // Tangent is parallel to offset_direction, try perpendicular direction
+            let perp_dir = if (self.offset_direction[0].abs() < 0.9) {
+                [0.0, 0.0, 1.0]
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            
+            let normal2 = cross(&perp_dir, &tangent_norm);
+            let normal2_len = (normal2[0] * normal2[0] + normal2[1] * normal2[1] + normal2[2] * normal2[2]).sqrt();
+            
+            if normal2_len < 1e-10 {
+                return Err(CascadeError::InvalidGeometry(
+                    "Cannot compute offset normal: no perpendicular direction found".to_string()
+                ));
+            }
+            
+            Ok([
+                normal2[0] / normal2_len,
+                normal2[1] / normal2_len,
+                normal2[2] / normal2_len,
+            ])
+        } else {
+            Ok([
+                normal[0] / normal_len,
+                normal[1] / normal_len,
+                normal[2] / normal_len,
+            ])
+        }
+    }
+}
+
 /// Evaluate a parabola at parameter u
 /// 
 /// The parabola is defined parametrically as:
@@ -488,6 +948,85 @@ fn tangent_parabola(
     let mut tangent = [0.0; 3];
     for i in 0..3 {
         tangent[i] = x_dir[i] + y_factor * y_dir[i];
+    }
+    Ok(tangent)
+}
+
+/// Evaluate a hyperbola at parameter u
+/// 
+/// The hyperbola is defined parametrically as:
+/// P(u) = center + a*cosh(u)*x_dir + b*sinh(u)*y_dir
+/// 
+/// where:
+/// - a is major_radius
+/// - b is minor_radius
+/// - cosh(u) = (e^u + e^(-u)) / 2
+/// - sinh(u) = (e^u - e^(-u)) / 2
+fn evaluate_hyperbola(
+    center: &[f64; 3],
+    x_dir: &[f64; 3],
+    y_dir: &[f64; 3],
+    major_radius: f64,
+    minor_radius: f64,
+    u: f64,
+) -> Result<[f64; 3]> {
+    if major_radius.abs() < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Hyperbola major radius must be non-zero".to_string(),
+        ));
+    }
+    if minor_radius.abs() < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Hyperbola minor radius must be non-zero".to_string(),
+        ));
+    }
+    
+    // P(u) = center + a*cosh(u)*x_dir + b*sinh(u)*y_dir
+    let cosh_u = u.cosh();
+    let sinh_u = u.sinh();
+    
+    let x_component = major_radius * cosh_u;
+    let y_component = minor_radius * sinh_u;
+    
+    let mut point = [0.0; 3];
+    for i in 0..3 {
+        point[i] = center[i] + x_component * x_dir[i] + y_component * y_dir[i];
+    }
+    Ok(point)
+}
+
+/// Tangent vector to hyperbola at parameter u
+/// 
+/// The derivative is:
+/// dP/du = a*sinh(u)*x_dir + b*cosh(u)*y_dir
+fn tangent_hyperbola(
+    x_dir: &[f64; 3],
+    y_dir: &[f64; 3],
+    major_radius: f64,
+    minor_radius: f64,
+    u: f64,
+) -> Result<[f64; 3]> {
+    if major_radius.abs() < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Hyperbola major radius must be non-zero".to_string(),
+        ));
+    }
+    if minor_radius.abs() < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Hyperbola minor radius must be non-zero".to_string(),
+        ));
+    }
+    
+    // dP/du = a*sinh(u)*x_dir + b*cosh(u)*y_dir
+    let sinh_u = u.sinh();
+    let cosh_u = u.cosh();
+    
+    let x_component = major_radius * sinh_u;
+    let y_component = minor_radius * cosh_u;
+    
+    let mut tangent = [0.0; 3];
+    for i in 0..3 {
+        tangent[i] = x_component * x_dir[i] + y_component * y_dir[i];
     }
     Ok(tangent)
 }
@@ -1046,5 +1585,414 @@ mod tests {
             0.0,
         );
         assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_offset_curve_creation() {
+        // Create a simple circle to offset
+        let circle = CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+        };
+        
+        // Create offset curve with offset distance 0.5
+        let offset = OffsetCurve::new(circle.clone(), 0.5, [0.0, 0.0, 1.0]).unwrap();
+        
+        assert!((offset.offset() - 0.5).abs() < 1e-10);
+        assert_eq!(offset.direction(), [0.0, 0.0, 1.0]);
+        
+        // Match basis curve
+        match offset.basis_curve() {
+            CurveType::Arc { center, radius } => {
+                assert_eq!(*center, [0.0, 0.0, 0.0]);
+                assert_eq!(*radius, 1.0);
+            }
+            _ => panic!("Expected Arc curve type"),
+        }
+    }
+    
+    #[test]
+    fn test_offset_curve_invalid_distance() {
+        let circle = CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+        };
+        
+        // Zero offset distance should fail
+        assert!(OffsetCurve::new(circle.clone(), 0.0, [0.0, 0.0, 1.0]).is_err());
+    }
+    
+    #[test]
+    fn test_offset_curve_evaluation_circle() {
+        // Create a unit circle in XY plane
+        let circle = CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+        };
+        
+        // Offset by 0.5 in Z direction (upward)
+        let offset = OffsetCurve::new(circle.clone(), 0.5, [0.0, 0.0, 1.0]).unwrap();
+        
+        // At t=0, circle is at (1, 0, 0), offset point should be at approximately (1, 0, 0.5)
+        // Because the normal will be computed as cross([0,0,1], [0,2π,0]) which gives [2π, 0, 0]
+        // Actually, let's think about this more carefully:
+        // tangent at t=0 for circle: [0, 2π, 0] (pointing in +y direction)
+        // offset_direction: [0, 0, 1]
+        // normal = cross([0,0,1], [0,1,0]) = [1, 0, 0] (pointing outward from circle)
+        let p0 = offset.point_at(0.0).unwrap();
+        // The basis point is (1, 0, 0), offset by 0.5 in the computed normal direction
+        // For a circle, the normal at any point should point radially outward
+        // So at (1,0,0), the normal in the plane of [0,0,1] and tangent [0,1,0] should be [1,0,0]
+        // Thus the offset point should be at (1.5, 0, 0)
+        
+        // Check that the point is offset from the basis
+        let basis_p0 = point_at(&circle, 0.0).unwrap();
+        let offset_distance = ((p0[0] - basis_p0[0]).powi(2) + 
+                               (p0[1] - basis_p0[1]).powi(2) + 
+                               (p0[2] - basis_p0[2]).powi(2)).sqrt();
+        assert!((offset_distance - 0.5).abs() < 1e-9, "Expected offset distance 0.5, got {}", offset_distance);
+    }
+    
+    #[test]
+    fn test_offset_curve_tangent_same_as_basis() {
+        // Create a simple line
+        let line = CurveType::Bezier {
+            control_points: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+            ],
+        };
+        
+        // Create offset
+        let offset = OffsetCurve::new(line.clone(), 0.5, [0.0, 0.0, 1.0]).unwrap();
+        
+        // Tangent should be the same as basis curve
+        let basis_tangent = tangent_at(&line, 0.5).unwrap();
+        let offset_tangent = offset.tangent_at(0.5).unwrap();
+        
+        for i in 0..3 {
+            assert!((basis_tangent[i] - offset_tangent[i]).abs() < 1e-10);
+        }
+    }
+    
+    #[test]
+    fn test_offset_curve_to_from_curve_type() {
+        let circle = CurveType::Arc {
+            center: [1.0, 2.0, 3.0],
+            radius: 2.0,
+        };
+        
+        let offset = OffsetCurve::new(circle, 0.75, [1.0, 0.0, 0.0]).unwrap();
+        
+        // Convert to CurveType
+        let curve_type = offset.to_curve_type();
+        
+        // Convert back
+        let recovered = OffsetCurve::from_curve_type(&curve_type).unwrap();
+        
+        assert!((recovered.offset() - 0.75).abs() < 1e-10);
+        assert!((recovered.direction()[0] - 1.0).abs() < 1e-10);
+    }
+    
+    #[test]
+    fn test_offset_curve_via_enum() {
+        // Test the CurveType::Offset variant directly via point_at
+        let line = CurveType::Bezier {
+            control_points: vec![
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+            ],
+        };
+        
+        let offset_enum = CurveType::Offset {
+            basis_curve: Box::new(line),
+            offset_distance: 0.5,
+            offset_direction: [0.0, 0.0, 1.0],
+        };
+        
+        // At t=0, basis is at (0,0,0), tangent is [2,0,0]
+        // normal = cross([0,0,1], [1,0,0]) = [0, -1, 0]
+        // offset point = (0,0,0) + 0.5 * [0, -1, 0] = (0, -0.5, 0)
+        let p0 = point_at(&offset_enum, 0.0).unwrap();
+        
+        // Check that we have an offset
+        assert!(p0[0].abs() < 1e-9 || p0[0].abs() > 1e-10);
+        
+        // At t=1, basis is at (2,0,0), tangent is [2,0,0]
+        // offset should still apply
+        let p1 = point_at(&offset_enum, 1.0).unwrap();
+        assert!((p1[0] - 2.0).abs() < 1e-9);
+    }
+    
+    #[test]
+    fn test_offset_bezier_curve() {
+        // Quadratic Bezier curve in XY plane
+        let bezier = CurveType::Bezier {
+            control_points: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [2.0, 0.0, 0.0],
+            ],
+        };
+        
+        // Offset by 0.1 in Z direction
+        let offset = OffsetCurve::new(bezier.clone(), 0.1, [0.0, 0.0, 1.0]).unwrap();
+        
+        // At t=0, basis is at (0,0,0), tangent points in +y direction
+        // normal = cross([0,0,1], tangent_direction) should be perpendicular
+        let p0 = offset.point_at(0.0).unwrap();
+        
+        // Verify offset was applied
+        let basis_p0 = point_at(&bezier, 0.0).unwrap();
+        let dist = ((p0[0] - basis_p0[0]).powi(2) + 
+                    (p0[1] - basis_p0[1]).powi(2) + 
+                    (p0[2] - basis_p0[2]).powi(2)).sqrt();
+        assert!((dist - 0.1).abs() < 1e-9, "Expected offset distance 0.1, got {}", dist);
+    }
+
+    #[test]
+    fn test_hyperbola_standard() {
+        // Standard hyperbola: x²/4 - y²/1 = 1
+        let hyperbola = Hyperbola::standard(2.0, 1.0).unwrap();
+        
+        // At u=0, should be at (2, 0, 0) - vertex on right branch
+        // cosh(0) = 1, sinh(0) = 0
+        let p0 = hyperbola.point_at(0.0);
+        assert!((p0[0] - 2.0).abs() < 1e-10);
+        assert!(p0[1].abs() < 1e-10);
+        assert!(p0[2].abs() < 1e-10);
+        
+        // At u=ln(3), cosh(u) ≈ (3 + 1/3)/2 = 5/3, sinh(u) ≈ (3 - 1/3)/2 = 4/3
+        let u = (3.0_f64).ln();
+        let p = hyperbola.point_at(u);
+        let cosh_u = u.cosh();
+        let sinh_u = u.sinh();
+        let expected_x = 0.0 + 2.0 * cosh_u;
+        let expected_y = 0.0 + 1.0 * sinh_u;
+        assert!((p[0] - expected_x).abs() < 1e-10);
+        assert!((p[1] - expected_y).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_foci() {
+        // Hyperbola with a=3, b=4
+        // c = sqrt(9 + 16) = 5
+        let hyperbola = Hyperbola::standard(3.0, 4.0).unwrap();
+        
+        let c = 5.0;
+        let focus1 = hyperbola.focus1();
+        let focus2 = hyperbola.focus2();
+        
+        // Focus 1 should be at (5, 0, 0)
+        assert!((focus1[0] - c).abs() < 1e-10);
+        assert!(focus1[1].abs() < 1e-10);
+        assert!(focus1[2].abs() < 1e-10);
+        
+        // Focus 2 should be at (-5, 0, 0)
+        assert!((focus2[0] + c).abs() < 1e-10);
+        assert!(focus2[1].abs() < 1e-10);
+        assert!(focus2[2].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_eccentricity() {
+        // For a=3, b=4, c=5, eccentricity e = 5/3
+        let hyperbola = Hyperbola::standard(3.0, 4.0).unwrap();
+        let e = hyperbola.eccentricity();
+        assert!((e - 5.0 / 3.0).abs() < 1e-10);
+        
+        // For a circle-like hyperbola with a=b, e = sqrt(2)
+        let hyperbola2 = Hyperbola::standard(1.0, 1.0).unwrap();
+        let e2 = hyperbola2.eccentricity();
+        assert!((e2 - 2.0_f64.sqrt()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_asymptotes() {
+        // For a=2, b=1, asymptotes have slopes ±1/2
+        let hyperbola = Hyperbola::standard(2.0, 1.0).unwrap();
+        let (asym1, asym2) = hyperbola.asymptotes();
+        
+        // Asymptote 1: direction = x_dir + 0.5*y_dir = (1, 0.5, 0)
+        let expected_asym1 = [1.0, 0.5, 0.0];
+        assert!((asym1[0] - expected_asym1[0]).abs() < 1e-10);
+        assert!((asym1[1] - expected_asym1[1]).abs() < 1e-10);
+        
+        // Asymptote 2: direction = x_dir - 0.5*y_dir = (1, -0.5, 0)
+        let expected_asym2 = [1.0, -0.5, 0.0];
+        assert!((asym2[0] - expected_asym2[0]).abs() < 1e-10);
+        assert!((asym2[1] - expected_asym2[1]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_tangent() {
+        let hyperbola = Hyperbola::standard(3.0, 4.0).unwrap();
+        
+        // At u=0, tangent should be (0, 4, 0) since dP/du = a*sinh(u)*x + b*cosh(u)*y
+        // = 3*0*x + 4*1*y = (0, 4, 0)
+        let t0 = hyperbola.tangent_at(0.0);
+        assert!(t0[0].abs() < 1e-10);
+        assert!((t0[1] - 4.0).abs() < 1e-10);
+        assert!(t0[2].abs() < 1e-10);
+        
+        // At u=ln(2), check it matches the parametric derivative
+        let u = 2.0_f64.ln();
+        let t = hyperbola.tangent_at(u);
+        let sinh_u = u.sinh();
+        let cosh_u = u.cosh();
+        let expected_x = 3.0 * sinh_u;
+        let expected_y = 4.0 * cosh_u;
+        assert!((t[0] - expected_x).abs() < 1e-10);
+        assert!((t[1] - expected_y).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_negative_parameter() {
+        // Negative u should give the left branch of the hyperbola
+        let hyperbola = Hyperbola::standard(2.0, 1.0).unwrap();
+        
+        // At u=-ln(3), cosh(-u) = cosh(u), sinh(-u) = -sinh(u)
+        let u = (3.0_f64).ln();
+        let p_pos = hyperbola.point_at(u);
+        let p_neg = hyperbola.point_at(-u);
+        
+        // x-coordinates should be the same (cosh is even)
+        assert!((p_pos[0] - p_neg[0]).abs() < 1e-10);
+        
+        // y-coordinates should be opposite (sinh is odd)
+        assert!((p_pos[1] + p_neg[1]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_3d() {
+        // Non-standard orientation
+        let hyperbola = Hyperbola::new(
+            [1.0, 2.0, 3.0],         // Center at (1,2,3)
+            [0.0, 0.0, 1.0],         // Transverse axis along Z
+            [1.0, 0.0, 0.0],         // Conjugate axis along X
+            2.0,                      // major_radius = 2
+            1.5,                      // minor_radius = 1.5
+        ).unwrap();
+        
+        // At u=0, should be at center + 2*z_dir = (1, 2, 5)
+        let p0 = hyperbola.point_at(0.0);
+        assert!((p0[0] - 1.0).abs() < 1e-10);
+        assert!((p0[1] - 2.0).abs() < 1e-10);
+        assert!((p0[2] - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_curve_type_evaluation() {
+        // Test that CurveType::Hyperbola works with the point_at function
+        let curve = CurveType::Hyperbola {
+            center: [0.0, 0.0, 0.0],
+            x_dir: [1.0, 0.0, 0.0],
+            y_dir: [0.0, 1.0, 0.0],
+            major_radius: 2.0,
+            minor_radius: 1.0,
+        };
+        
+        // At u=0, should be at (2, 0, 0)
+        let p0 = point_at(&curve, 0.0).unwrap();
+        assert!((p0[0] - 2.0).abs() < 1e-10);
+        assert!(p0[1].abs() < 1e-10);
+        assert!(p0[2].abs() < 1e-10);
+        
+        // At u=ln(3), should match the hyperbola calculation
+        let u = 3.0_f64.ln();
+        let p = point_at(&curve, u).unwrap();
+        let cosh_u = u.cosh();
+        let sinh_u = u.sinh();
+        let expected_x = 0.0 + 2.0 * cosh_u;
+        let expected_y = 0.0 + 1.0 * sinh_u;
+        assert!((p[0] - expected_x).abs() < 1e-10);
+        assert!((p[1] - expected_y).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_curve_type_tangent() {
+        let curve = CurveType::Hyperbola {
+            center: [0.0, 0.0, 0.0],
+            x_dir: [1.0, 0.0, 0.0],
+            y_dir: [0.0, 1.0, 0.0],
+            major_radius: 3.0,
+            minor_radius: 4.0,
+        };
+        
+        // At u=0, tangent should be (0, 4, 0)
+        let t0 = tangent_at(&curve, 0.0).unwrap();
+        assert!(t0[0].abs() < 1e-10);
+        assert!((t0[1] - 4.0).abs() < 1e-10);
+        assert!(t0[2].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_invalid_radii() {
+        // Zero major radius should fail
+        let result = Hyperbola::new(
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            0.0,
+            1.0,
+        );
+        assert!(result.is_err());
+        
+        // Zero minor radius should fail
+        let result2 = Hyperbola::new(
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            1.0,
+            0.0,
+        );
+        assert!(result2.is_err());
+    }
+
+    #[test]
+    fn test_hyperbola_conversion() {
+        let hyperbola = Hyperbola::standard(2.0, 1.5).unwrap();
+        let curve_type = hyperbola.to_curve_type();
+        
+        // Verify that the conversion preserves all values
+        match curve_type {
+            CurveType::Hyperbola {
+                center,
+                x_dir,
+                y_dir,
+                major_radius,
+                minor_radius,
+            } => {
+                assert_eq!(center, [0.0, 0.0, 0.0]);
+                assert_eq!(x_dir, [1.0, 0.0, 0.0]);
+                assert_eq!(y_dir, [0.0, 1.0, 0.0]);
+                assert!((major_radius - 2.0).abs() < 1e-10);
+                assert!((minor_radius - 1.5).abs() < 1e-10);
+            }
+            _ => panic!("Expected CurveType::Hyperbola"),
+        }
+    }
+
+    #[test]
+    fn test_hyperbola_parameter() {
+        let hyperbola = Hyperbola::standard(3.5, 2.1).unwrap();
+        
+        // parameter() should return major_radius
+        assert!((hyperbola.parameter() - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hyperbola_center_point() {
+        let center = [5.0, 6.0, 7.0];
+        let hyperbola = Hyperbola::new(
+            center,
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            2.0,
+            1.0,
+        ).unwrap();
+        
+        let c = hyperbola.center_point();
+        assert_eq!(c, center);
     }
 }

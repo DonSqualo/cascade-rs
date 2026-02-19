@@ -29,7 +29,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Hyperbola
 - [x] BezierCurve
 - [x] BSplineCurve
-- [ ] OffsetCurve
+- [x] OffsetCurve
 - [x] TrimmedCurve
 
 ### 2.3 Geometry - Surfaces
@@ -42,8 +42,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] BSplineSurface
 - [ ] RectangularTrimmedSurface
 - [ ] OffsetSurface
-- [ ] SurfaceOfRevolution
-- [ ] SurfaceOfLinearExtrusion
+- [x] SurfaceOfRevolution
+- [x] SurfaceOfLinearExtrusion
 - [ ] PlateSurface
 
 ### 2.4 Topology
@@ -254,4 +254,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2025-02-21 - Added geom module with gp_Dir (unit vector/direction), Pnt, Vec3 types*
+*Last updated: 2026-02-23 - Implemented SurfaceOfRevolution for rotating curves around an axis*

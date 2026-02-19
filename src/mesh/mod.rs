@@ -84,7 +84,13 @@ fn triangulate_face(
                 triangles,
             )?;
         }
+        SurfaceType::BezierSurface { .. } => {
+            triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
         SurfaceType::SurfaceOfRevolution { .. } => {
+            triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
+        SurfaceType::SurfaceOfLinearExtrusion { .. } => {
             triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
         }
     }

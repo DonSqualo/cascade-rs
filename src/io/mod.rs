@@ -234,8 +234,8 @@ impl<W: Write> StepWriter<W> {
                 self.entities.push(line_entity);
                 line_id
             }
-            CurveType::Parabola { .. } | CurveType::Trimmed { .. } => {
-                // For now, approximate parabola and trimmed curves as lines
+            CurveType::Parabola { .. } | CurveType::Trimmed { .. } | CurveType::Hyperbola { .. } | CurveType::Offset { .. } => {
+                // For now, approximate parabola, hyperbola, trimmed, and offset curves as lines
                 let line_id = self.next_id();
                 let dir_id = self.next_id();
                 
@@ -419,8 +419,8 @@ impl<W: Write> StepWriter<W> {
                 
                 torus_id
             }
-            SurfaceType::BSpline { .. } => {
-                // Fallback to plane for B-spline surfaces
+            SurfaceType::BSpline { .. } | SurfaceType::BezierSurface { .. } => {
+                // Fallback to plane for B-spline and Bezier surfaces
                 let plane_id = self.next_id();
                 let origin_id = self.next_id();
                 let normal_id = self.next_id();
@@ -466,6 +466,53 @@ impl<W: Write> StepWriter<W> {
                 self.entities.push(plane_entity);
                 
                 surf_id
+            }
+            SurfaceType::SurfaceOfLinearExtrusion { direction, .. } => {
+                // Export as a plane representation for now
+                // TODO: Implement proper SURFACE_OF_LINEAR_EXTRUSION in STEP
+                let surf_id = self.next_id();
+                let origin_id = self.next_id();
+                let normal_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+                    origin_id
+                );
+                self.entities.push(origin_entity);
+                
+                let normal_entity = format!(
+                    "#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));",
+                    normal_id, direction[0], direction[1], direction[2]
+                );
+                self.entities.push(normal_entity);
+                
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", surf_id, origin_id, normal_id);
+                self.entities.push(plane_entity);
+                
+                surf_id
+            }
+            SurfaceType::BezierSurface { .. } => {
+                // Fallback to plane for Bezier surfaces
+                let plane_id = self.next_id();
+                let origin_id = self.next_id();
+                let normal_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+                    origin_id
+                );
+                self.entities.push(origin_entity);
+                
+                let normal_entity = format!(
+                    "#{} = DIRECTION('', (0.0, 0.0, 1.0));",
+                    normal_id
+                );
+                self.entities.push(normal_entity);
+                
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", plane_id, origin_id, normal_id);
+                self.entities.push(plane_entity);
+                
+                plane_id
             }
         };
         
