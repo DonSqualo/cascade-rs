@@ -19,7 +19,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] gp_Pnt2d (2D point)
 - [x] gp_Vec2d (2D vector)
 - [x] gp_Dir (unit vector)
-- [ ] gp_XYZ (coordinates)
+- [x] gp_XYZ (coordinates)
 
 ### 2.2 Geometry - Curves
 - [x] Line
@@ -62,7 +62,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Shared edge query
 - [x] Face neighbors map
 - [x] Explorer (iterate sub-shapes)
-- [ ] Builder (construct topology)
+- [x] Builder (construct topology)
 - [ ] Modifier (edit topology)
 
 ## Module 3: Modeling Algorithms
@@ -250,10 +250,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
 2. RectangularTrimmedSurface, OffsetSurface, PlateSurface
-3. Explorer/Builder/Modifier (topology manipulation)
+3. Modifier (edit topology)
 4. Full STEP/IGES compliance
 5. Point/curve/surface projection operations
 
 ---
 
-*Last updated: 2026-02-20 - Implemented Explorer (iterate sub-shapes)*
+*Last updated: 2026-02-21 - Implemented Builder (construct topology)*
