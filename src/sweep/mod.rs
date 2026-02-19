@@ -102,7 +102,7 @@ pub fn make_prism(profile: &Face, direction: &[f64; 3], distance: f64) -> Result
     let mut faces = vec![base_face, top_face];
     faces.extend(side_faces);
     
-    let shell = Shell { faces };
+    let shell = Shell { faces, closed: true };
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
@@ -210,7 +210,7 @@ pub fn make_pipe(profile: &Face, path: &Wire) -> Result<Solid> {
     // End cap
     all_faces.push(profile_sections[profile_sections.len() - 1].clone());
     
-    let shell = Shell { faces: all_faces };
+    let shell = Shell { faces: all_faces, closed: true };
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
@@ -622,7 +622,7 @@ pub fn make_revol(
     // End cap
     all_faces.push(profile_sections[profile_sections.len() - 1].clone());
     
-    let shell = Shell { faces: all_faces };
+    let shell = Shell { faces: all_faces, closed: true };
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],

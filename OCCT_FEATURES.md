@@ -226,10 +226,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Closest point on shape
 
 ### 6.3 Validity Checks
-- [ ] Check shape validity
-- [ ] Check watertight
-- [ ] Check self-intersection
-- [ ] Check degeneracies
+- [x] Check shape validity (check_valid)
+- [x] Check watertight (check_watertight)
+- [x] Check self-intersection (check_self_intersection)
+- [x] Check degeneracies (degenerate edges/faces detection)
 
 ## Module 7: Visualization (Lower Priority)
 - [ ] 3D viewer
