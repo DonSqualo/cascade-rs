@@ -98,7 +98,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Skinning
 
 ### 3.5 Filleting & Chamfering
-- [ ] Fillet (constant radius)
+- [x] Fillet (constant radius)
 - [ ] Fillet (variable radius)
 - [ ] Chamfer
 - [ ] Blend (rolling ball)
