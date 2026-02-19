@@ -234,6 +234,28 @@ impl<W: Write> StepWriter<W> {
                 self.entities.push(line_entity);
                 line_id
             }
+            CurveType::Parabola { .. } | CurveType::Trimmed { .. } => {
+                // For now, approximate parabola and trimmed curves as lines
+                let line_id = self.next_id();
+                let dir_id = self.next_id();
+                
+                let dx = e.end.point[0] - e.start.point[0];
+                let dy = e.end.point[1] - e.start.point[1];
+                let dz = e.end.point[2] - e.start.point[2];
+                
+                let dir_entity = format!(
+                    "#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));",
+                    dir_id, dx, dy, dz
+                );
+                self.entities.push(dir_entity);
+                
+                let line_entity = format!(
+                    "#{} = LINE('', #{}, #{});",
+                    line_id, start_pt_id, dir_id
+                );
+                self.entities.push(line_entity);
+                line_id
+            }
         };
         
         let edge_curve_id = self.next_id();
@@ -419,6 +441,31 @@ impl<W: Write> StepWriter<W> {
                 self.entities.push(plane_entity);
                 
                 plane_id
+            }
+            SurfaceType::SurfaceOfRevolution { axis_location, axis_direction, .. } => {
+                // Export as SURFACE_OF_REVOLUTION in STEP
+                // For now, fallback to a placeholder plane
+                let surf_id = self.next_id();
+                let origin_id = self.next_id();
+                let axis_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', ({:.6}, {:.6}, {:.6}));",
+                    origin_id, axis_location[0], axis_location[1], axis_location[2]
+                );
+                self.entities.push(origin_entity);
+                
+                let axis_entity = format!(
+                    "#{} = DIRECTION('', ({:.6}, {:.6}, {:.6}));",
+                    axis_id, axis_direction[0], axis_direction[1], axis_direction[2]
+                );
+                self.entities.push(axis_entity);
+                
+                // Fallback to plane representation
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", surf_id, origin_id, axis_id);
+                self.entities.push(plane_entity);
+                
+                surf_id
             }
         };
         

@@ -25,7 +25,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Line
 - [x] Circle
 - [x] Ellipse
-- [ ] Parabola
+- [x] Parabola
 - [ ] Hyperbola
 - [x] BezierCurve
 - [x] BSplineCurve

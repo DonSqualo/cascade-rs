@@ -84,6 +84,9 @@ fn triangulate_face(
                 triangles,
             )?;
         }
+        SurfaceType::SurfaceOfRevolution { .. } => {
+            triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
     }
     Ok(())
 }
@@ -492,6 +495,60 @@ fn triangulate_bspline_face(
             }
             .normal_at(u, v);
             
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles by connecting grid points
+    for u_idx in 0..u_subdivisions {
+        for v_idx in 0..v_subdivisions {
+            let v0 = base_idx + u_idx * (v_subdivisions + 1) + v_idx;
+            let v1 = base_idx + u_idx * (v_subdivisions + 1) + v_idx + 1;
+            let v2 = base_idx + (u_idx + 1) * (v_subdivisions + 1) + v_idx;
+            let v3 = base_idx + (u_idx + 1) * (v_subdivisions + 1) + v_idx + 1;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a parametric surface (uses surface_type.point_at/normal_at)
+/// Works for SurfaceOfRevolution and any surface with proper parametric evaluation
+fn triangulate_parametric_surface(
+    face: &Face,
+    _tolerance: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    // Use fixed grid subdivision for parametric surfaces
+    // u ∈ [0, 1] for curve parameter
+    // v ∈ [0, 2π] for rotation angle (for SurfaceOfRevolution)
+    let u_subdivisions = 16;
+    let v_subdivisions = 32;
+    
+    let u_min = 0.0;
+    let u_max = 1.0;
+    let v_min = 0.0;
+    let v_max = 2.0 * std::f64::consts::PI;
+    
+    let base_idx = vertices.len();
+    
+    // Create vertex grid
+    for u_idx in 0..=u_subdivisions {
+        let u = u_min + (u_idx as f64) / (u_subdivisions as f64) * (u_max - u_min);
+        
+        for v_idx in 0..=v_subdivisions {
+            let v = v_min + (v_idx as f64) / (v_subdivisions as f64) * (v_max - v_min);
+            
+            // Evaluate point and normal on surface
+            let pt = face.surface_type.point_at(u, v);
+            let normal = face.surface_type.normal_at(u, v);
+            
+            vertices.push(pt);
             normals.push(normal);
         }
     }

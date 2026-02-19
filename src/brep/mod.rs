@@ -34,8 +34,35 @@ pub enum CurveType {
     Line,
     Arc { center: [f64; 3], radius: f64 },
     Ellipse { center: [f64; 3], major_axis: [f64; 3], minor_axis: [f64; 3] },
+    /// Parabola defined by position (axis system) and focal parameter
+    /// 
+    /// The parabola is defined parametrically as:
+    /// P(u) = origin + u * x_dir + (u² / (4 * focal)) * y_dir
+    /// 
+    /// - origin: vertex of the parabola (also the position origin)
+    /// - x_dir: direction along the parabola axis (from vertex toward infinity)
+    /// - y_dir: direction perpendicular to axis (in the plane of the parabola)
+    /// - focal: focal parameter (distance from vertex to focus = focal/2)
+    Parabola { 
+        origin: [f64; 3], 
+        x_dir: [f64; 3], 
+        y_dir: [f64; 3], 
+        focal: f64 
+    },
     Bezier { control_points: Vec<[f64; 3]> },
     BSpline { control_points: Vec<[f64; 3]>, knots: Vec<f64>, degree: usize, weights: Option<Vec<f64>> },
+    /// A bounded portion of an underlying curve defined by parameter limits
+    /// 
+    /// The trimmed curve restricts evaluation to the parameter range [u1, u2]
+    /// of the basis curve. Useful for representing partial curves.
+    Trimmed { 
+        /// The underlying curve being trimmed
+        basis_curve: Box<CurveType>, 
+        /// First parameter (start of trimmed portion)
+        u1: f64, 
+        /// Second parameter (end of trimmed portion)
+        u2: f64 
+    },
 }
 
 /// A wire is a connected sequence of edges
@@ -67,6 +94,21 @@ pub enum SurfaceType {
         v_knots: Vec<f64>,
         control_points: Vec<Vec<[f64; 3]>>,  // 2D grid
         weights: Option<Vec<Vec<f64>>>,      // Optional NURBS weights
+    },
+    /// Surface of revolution - created by rotating a curve around an axis
+    /// u parameter: curve parameter (0 to 1)
+    /// v parameter: rotation angle (0 to 2π for full revolution)
+    SurfaceOfRevolution {
+        /// The generatrix curve being revolved
+        basis_curve: CurveType,
+        /// Start point of the basis curve (needed for Line evaluation)
+        curve_start: [f64; 3],
+        /// End point of the basis curve (needed for Line evaluation)
+        curve_end: [f64; 3],
+        /// A point on the axis of revolution
+        axis_location: [f64; 3],
+        /// Direction of the axis of revolution (will be normalized)
+        axis_direction: [f64; 3],
     },
 }
 
@@ -135,6 +177,22 @@ impl SurfaceType {
                 weights,
             } => {
                 evaluate_bspline_surface(u, v, *u_degree, *v_degree, u_knots, v_knots, control_points, weights.as_ref())
+            }
+            SurfaceType::SurfaceOfRevolution {
+                basis_curve,
+                curve_start,
+                curve_end,
+                axis_location,
+                axis_direction,
+            } => {
+                evaluate_surface_of_revolution(
+                    u, v,
+                    basis_curve,
+                    curve_start,
+                    curve_end,
+                    axis_location,
+                    axis_direction,
+                )
             }
         }
     }
@@ -213,6 +271,41 @@ impl SurfaceType {
             } => {
                 bspline_surface_normal(u, v, *u_degree, *v_degree, u_knots, v_knots, control_points, weights.as_ref())
             }
+            SurfaceType::SurfaceOfRevolution {
+                basis_curve,
+                curve_start,
+                curve_end,
+                axis_location,
+                axis_direction,
+            } => {
+                surface_of_revolution_normal(
+                    u, v,
+                    basis_curve,
+                    curve_start,
+                    curve_end,
+                    axis_location,
+                    axis_direction,
+                )
+            }
+        }
+    }
+}
+
+impl SurfaceType {
+    /// Create a SurfaceOfRevolution from a basis curve and axis
+    pub fn revolution(
+        basis_curve: CurveType,
+        curve_start: [f64; 3],
+        curve_end: [f64; 3],
+        axis_location: [f64; 3],
+        axis_direction: [f64; 3],
+    ) -> Self {
+        SurfaceType::SurfaceOfRevolution {
+            basis_curve,
+            curve_start,
+            curve_end,
+            axis_location,
+            axis_direction,
         }
     }
 }
@@ -446,6 +539,238 @@ fn bspline_surface_normal(
     
     let pt_v_plus = evaluate_bspline_surface(u, v + delta, u_degree, v_degree, u_knots, v_knots, control_points, weights);
     let pt_v_minus = evaluate_bspline_surface(u, v - delta, u_degree, v_degree, u_knots, v_knots, control_points, weights);
+    let tangent_v = [
+        pt_v_plus[0] - pt_v_minus[0],
+        pt_v_plus[1] - pt_v_minus[1],
+        pt_v_plus[2] - pt_v_minus[2],
+    ];
+    
+    // Normal is cross product of tangent vectors
+    let normal = cross(&tangent_u, &tangent_v);
+    normalize(&normal)
+}
+
+// ===== Surface of Revolution Functions =====
+
+/// Evaluate a point on the basis curve
+/// For Line curves, we need the start/end points; for others we use curve evaluation
+fn evaluate_basis_curve(
+    curve: &CurveType,
+    start: &[f64; 3],
+    end: &[f64; 3],
+    t: f64,
+) -> [f64; 3] {
+    match curve {
+        CurveType::Line => {
+            // Linear interpolation between start and end
+            [
+                start[0] + t * (end[0] - start[0]),
+                start[1] + t * (end[1] - start[1]),
+                start[2] + t * (end[2] - start[2]),
+            ]
+        }
+        CurveType::Arc { center, radius } => {
+            let angle = t * 2.0 * std::f64::consts::PI;
+            [
+                center[0] + radius * angle.cos(),
+                center[1] + radius * angle.sin(),
+                center[2],
+            ]
+        }
+        CurveType::Ellipse { center, major_axis, minor_axis } => {
+            let angle = t * 2.0 * std::f64::consts::PI;
+            let cos_a = angle.cos();
+            let sin_a = angle.sin();
+            [
+                center[0] + cos_a * major_axis[0] + sin_a * minor_axis[0],
+                center[1] + cos_a * major_axis[1] + sin_a * minor_axis[1],
+                center[2] + cos_a * major_axis[2] + sin_a * minor_axis[2],
+            ]
+        }
+        CurveType::Bezier { control_points } => {
+            evaluate_bezier_curve(control_points, t)
+        }
+        CurveType::BSpline { control_points, knots, degree, weights } => {
+            evaluate_bspline_curve(control_points, knots, *degree, weights.as_deref(), t)
+        }
+        CurveType::Parabola { origin, x_dir, y_dir, focal } => {
+            // P(u) = origin + u * x_dir + (u² / (4 * focal)) * y_dir
+            // Remap t from [0,1] to a useful parameter range (e.g., [-10, 10])
+            let u = (t - 0.5) * 20.0;
+            let u_squared_term = u * u / (4.0 * focal);
+            [
+                origin[0] + u * x_dir[0] + u_squared_term * y_dir[0],
+                origin[1] + u * x_dir[1] + u_squared_term * y_dir[1],
+                origin[2] + u * x_dir[2] + u_squared_term * y_dir[2],
+            ]
+        }
+        CurveType::Trimmed { basis_curve, u1, u2 } => {
+            // Remap t ∈ [0,1] to [u1, u2]
+            let u = u1 + t * (u2 - u1);
+            evaluate_basis_curve(basis_curve, start, end, u)
+        }
+    }
+}
+
+/// De Casteljau's algorithm for Bezier curve evaluation
+fn evaluate_bezier_curve(control_points: &[[f64; 3]], t: f64) -> [f64; 3] {
+    if control_points.is_empty() {
+        return [0.0, 0.0, 0.0];
+    }
+    
+    let mut points = control_points.to_vec();
+    let n = points.len();
+    
+    for _ in 0..n - 1 {
+        for i in 0..points.len() - 1 {
+            points[i] = [
+                (1.0 - t) * points[i][0] + t * points[i + 1][0],
+                (1.0 - t) * points[i][1] + t * points[i + 1][1],
+                (1.0 - t) * points[i][2] + t * points[i + 1][2],
+            ];
+        }
+        points.pop();
+    }
+    
+    points[0]
+}
+
+/// Evaluate a B-spline curve at parameter t
+fn evaluate_bspline_curve(
+    control_points: &[[f64; 3]],
+    knots: &[f64],
+    degree: usize,
+    weights: Option<&[f64]>,
+    t: f64,
+) -> [f64; 3] {
+    if control_points.is_empty() || knots.is_empty() {
+        return [0.0, 0.0, 0.0];
+    }
+    
+    // Clamp t to valid range
+    let t_min = knots.get(degree).copied().unwrap_or(0.0);
+    let t_max = knots.get(knots.len() - degree - 1).copied().unwrap_or(1.0);
+    let t_clamped = t.max(t_min).min(t_max);
+    
+    // Compute basis functions for all control points
+    let mut point = [0.0; 3];
+    let mut weight_sum = 0.0;
+    
+    for (i, cp) in control_points.iter().enumerate() {
+        let basis = bspline_basis(t_clamped, i, degree, knots);
+        let w = weights.map(|ws| ws.get(i).copied().unwrap_or(1.0)).unwrap_or(1.0);
+        let weighted_basis = basis * w;
+        
+        point[0] += cp[0] * weighted_basis;
+        point[1] += cp[1] * weighted_basis;
+        point[2] += cp[2] * weighted_basis;
+        weight_sum += weighted_basis;
+    }
+    
+    if weight_sum.abs() > 1e-10 {
+        [point[0] / weight_sum, point[1] / weight_sum, point[2] / weight_sum]
+    } else {
+        point
+    }
+}
+
+/// Rotate a point around an axis using Rodrigues' rotation formula
+fn rotate_point_around_axis(
+    point: &[f64; 3],
+    axis_location: &[f64; 3],
+    axis_direction: &[f64; 3],
+    angle: f64,
+) -> [f64; 3] {
+    // Normalize axis direction
+    let axis = normalize(axis_direction);
+    
+    // Translate point relative to axis location
+    let p = [
+        point[0] - axis_location[0],
+        point[1] - axis_location[1],
+        point[2] - axis_location[2],
+    ];
+    
+    // Rodrigues' rotation formula:
+    // p_rot = p*cos(θ) + (axis × p)*sin(θ) + axis*(axis·p)*(1-cos(θ))
+    let cos_a = angle.cos();
+    let sin_a = angle.sin();
+    
+    // axis × p
+    let axis_cross_p = cross(&axis, &p);
+    
+    // axis · p
+    let axis_dot_p = axis[0] * p[0] + axis[1] * p[1] + axis[2] * p[2];
+    
+    let rotated = [
+        p[0] * cos_a + axis_cross_p[0] * sin_a + axis[0] * axis_dot_p * (1.0 - cos_a),
+        p[1] * cos_a + axis_cross_p[1] * sin_a + axis[1] * axis_dot_p * (1.0 - cos_a),
+        p[2] * cos_a + axis_cross_p[2] * sin_a + axis[2] * axis_dot_p * (1.0 - cos_a),
+    ];
+    
+    // Translate back
+    [
+        rotated[0] + axis_location[0],
+        rotated[1] + axis_location[1],
+        rotated[2] + axis_location[2],
+    ]
+}
+
+/// Evaluate a point on a surface of revolution
+/// u: curve parameter [0, 1]
+/// v: rotation angle [0, 2π]
+fn evaluate_surface_of_revolution(
+    u: f64,
+    v: f64,
+    basis_curve: &CurveType,
+    curve_start: &[f64; 3],
+    curve_end: &[f64; 3],
+    axis_location: &[f64; 3],
+    axis_direction: &[f64; 3],
+) -> [f64; 3] {
+    // Get point on basis curve at parameter u
+    let curve_point = evaluate_basis_curve(basis_curve, curve_start, curve_end, u);
+    
+    // Rotate around axis by angle v (v in [0, 2π] for full revolution)
+    let angle = v;
+    rotate_point_around_axis(&curve_point, axis_location, axis_direction, angle)
+}
+
+/// Compute normal for a surface of revolution using finite differences
+fn surface_of_revolution_normal(
+    u: f64,
+    v: f64,
+    basis_curve: &CurveType,
+    curve_start: &[f64; 3],
+    curve_end: &[f64; 3],
+    axis_location: &[f64; 3],
+    axis_direction: &[f64; 3],
+) -> [f64; 3] {
+    let delta = 1e-5;
+    
+    // Compute tangent vectors using finite differences
+    let pt_u_plus = evaluate_surface_of_revolution(
+        (u + delta).min(1.0), v,
+        basis_curve, curve_start, curve_end, axis_location, axis_direction
+    );
+    let pt_u_minus = evaluate_surface_of_revolution(
+        (u - delta).max(0.0), v,
+        basis_curve, curve_start, curve_end, axis_location, axis_direction
+    );
+    let tangent_u = [
+        pt_u_plus[0] - pt_u_minus[0],
+        pt_u_plus[1] - pt_u_minus[1],
+        pt_u_plus[2] - pt_u_minus[2],
+    ];
+    
+    let pt_v_plus = evaluate_surface_of_revolution(
+        u, v + delta,
+        basis_curve, curve_start, curve_end, axis_location, axis_direction
+    );
+    let pt_v_minus = evaluate_surface_of_revolution(
+        u, v - delta,
+        basis_curve, curve_start, curve_end, axis_location, axis_direction
+    );
     let tangent_v = [
         pt_v_plus[0] - pt_v_minus[0],
         pt_v_plus[1] - pt_v_minus[1],

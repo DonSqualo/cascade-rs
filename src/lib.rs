@@ -2,6 +2,7 @@
 //!
 //! Targeting 80/20 feature parity with OpenCASCADE.
 
+pub mod geom;
 pub mod primitive;
 pub mod boolean;
 pub mod brep;
@@ -23,8 +24,10 @@ pub mod intersect;
 pub mod offset;
 
 // Re-exports for convenience
+pub use geom::{Pnt, Vec3, Dir};
 pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
 pub use brep::topology;
+pub use curve::{Parabola, TrimmedCurve};
 pub use primitive::{make_box, make_sphere, make_cylinder, make_cone, make_torus};
 pub use boolean::{fuse, cut, common};
 pub use sweep::make_revol;
