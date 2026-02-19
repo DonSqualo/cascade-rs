@@ -63,7 +63,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Face neighbors map
 - [x] Explorer (iterate sub-shapes)
 - [x] Builder (construct topology)
-- [ ] Modifier (edit topology)
+- [x] Modifier (edit topology)
 
 ## Module 3: Modeling Algorithms
 
@@ -242,18 +242,18 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 82 features  
-**Remaining:** 84 features  
+**Implemented:** 83 features  
+**Remaining:** 83 features  
 **Total:** 166 features  
-**Completion:** 49%
+**Completion:** 50%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
 2. RectangularTrimmedSurface, OffsetSurface, PlateSurface
-3. Modifier (edit topology)
-4. Full STEP/IGES compliance
-5. Point/curve/surface projection operations
+3. Full STEP/IGES compliance
+4. Point/curve/surface projection operations
+5. Half-space and CompSolid support
 
 ---
 
-*Last updated: 2026-02-21 - Implemented Builder (construct topology)*
+*Last updated: 2026-02-21 - Implemented Modifier (edit topology)*

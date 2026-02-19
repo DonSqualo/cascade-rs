@@ -785,6 +785,281 @@ pub fn make_wedge(dx: f64, dy: f64, dz: f64, ltx: f64) -> Result<Solid> {
     Ok(solid)
 }
 
+/// Represents a half-space: an infinite solid bounded by a plane
+/// 
+/// A half-space is defined by a plane (origin + normal).
+/// The half-space extends infinitely in the direction of the normal.
+/// It can be used in boolean operations to cut solids by a plane.
+#[derive(Debug, Clone)]
+pub struct HalfSpace {
+    /// Origin point of the plane
+    pub origin: [f64; 3],
+    /// Normal vector of the plane (should be normalized)
+    /// Points toward the "inside" of the half-space
+    pub normal: [f64; 3],
+}
+
+impl HalfSpace {
+    /// Create a new half-space from a plane (origin + normal)
+    /// 
+    /// # Arguments
+    /// * `origin` - A point on the plane
+    /// * `normal` - Normal vector (will be normalized)
+    /// 
+    /// # Returns
+    /// A new HalfSpace
+    pub fn new(origin: [f64; 3], normal: [f64; 3]) -> Result<Self> {
+        // Normalize the normal vector
+        let len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        
+        if len < 1e-10 {
+            return Err(CascadeError::InvalidGeometry(
+                "Half-space normal vector must be non-zero".into()
+            ));
+        }
+        
+        let normalized_normal = [
+            normal[0] / len,
+            normal[1] / len,
+            normal[2] / len,
+        ];
+        
+        Ok(HalfSpace {
+            origin,
+            normal: normalized_normal,
+        })
+    }
+    
+    /// Get the plane defining this half-space
+    /// Returns (origin, normal) where normal is the inward-pointing normal
+    pub fn plane(&self) -> ([f64; 3], [f64; 3]) {
+        (self.origin, self.normal)
+    }
+    
+    /// Test if a point is contained in the half-space
+    /// 
+    /// A point is inside if: dot(point - origin, normal) >= 0
+    pub fn contains_point(&self, pt: [f64; 3]) -> bool {
+        let to_pt = [
+            pt[0] - self.origin[0],
+            pt[1] - self.origin[1],
+            pt[2] - self.origin[2],
+        ];
+        
+        let dot_product = to_pt[0] * self.normal[0] + to_pt[1] * self.normal[1] + to_pt[2] * self.normal[2];
+        
+        dot_product >= -1e-10  // Use small tolerance for floating point
+    }
+    
+    /// Convert a half-space to a solid by creating a large box aligned with the plane
+    /// This creates a finite approximation of the infinite half-space for boolean operations
+    /// 
+    /// # Arguments
+    /// * `bbox_size` - Half-size of the bounding box to create
+    /// 
+    /// # Returns
+    /// A Solid representing a bounded half-space
+    pub fn to_solid(&self, bbox_size: f64) -> Result<Solid> {
+        if bbox_size <= 0.0 {
+            return Err(CascadeError::InvalidGeometry(
+                "Bounding box size must be positive".into()
+            ));
+        }
+        
+        // Create an orthonormal basis with normal as Z axis
+        let nz = self.normal;
+        
+        // Find perpendicular vectors
+        let nx = if nz[0].abs() < 0.9 {
+            let v = [0.0, -nz[2], nz[1]];
+            let len = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]).sqrt();
+            [v[0]/len, v[1]/len, v[2]/len]
+        } else {
+            let v = [-nz[1], nz[0], 0.0];
+            let len = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]).sqrt();
+            [v[0]/len, v[1]/len, v[2]/len]
+        };
+        
+        let ny = [
+            nz[1]*nx[2] - nz[2]*nx[1],
+            nz[2]*nx[0] - nz[0]*nx[2],
+            nz[0]*nx[1] - nz[1]*nx[0],
+        ];
+        
+        // Create 8 vertices of the bounding box
+        // The box extends bbox_size in -z direction (behind the plane)
+        // and bbox_size in +z direction (into the half-space)
+        
+        let vertices: Vec<[f64; 3]> = vec![
+            // Back face (z = -bbox_size)
+            [
+                self.origin[0] - bbox_size*nx[0] - bbox_size*ny[0] - bbox_size*nz[0],
+                self.origin[1] - bbox_size*nx[1] - bbox_size*ny[1] - bbox_size*nz[1],
+                self.origin[2] - bbox_size*nx[2] - bbox_size*ny[2] - bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] + bbox_size*nx[0] - bbox_size*ny[0] - bbox_size*nz[0],
+                self.origin[1] + bbox_size*nx[1] - bbox_size*ny[1] - bbox_size*nz[1],
+                self.origin[2] + bbox_size*nx[2] - bbox_size*ny[2] - bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] + bbox_size*nx[0] + bbox_size*ny[0] - bbox_size*nz[0],
+                self.origin[1] + bbox_size*nx[1] + bbox_size*ny[1] - bbox_size*nz[1],
+                self.origin[2] + bbox_size*nx[2] + bbox_size*ny[2] - bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] - bbox_size*nx[0] + bbox_size*ny[0] - bbox_size*nz[0],
+                self.origin[1] - bbox_size*nx[1] + bbox_size*ny[1] - bbox_size*nz[1],
+                self.origin[2] - bbox_size*nx[2] + bbox_size*ny[2] - bbox_size*nz[2],
+            ],
+            // Front face (z = +bbox_size)
+            [
+                self.origin[0] - bbox_size*nx[0] - bbox_size*ny[0] + bbox_size*nz[0],
+                self.origin[1] - bbox_size*nx[1] - bbox_size*ny[1] + bbox_size*nz[1],
+                self.origin[2] - bbox_size*nx[2] - bbox_size*ny[2] + bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] + bbox_size*nx[0] - bbox_size*ny[0] + bbox_size*nz[0],
+                self.origin[1] + bbox_size*nx[1] - bbox_size*ny[1] + bbox_size*nz[1],
+                self.origin[2] + bbox_size*nx[2] - bbox_size*ny[2] + bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] + bbox_size*nx[0] + bbox_size*ny[0] + bbox_size*nz[0],
+                self.origin[1] + bbox_size*nx[1] + bbox_size*ny[1] + bbox_size*nz[1],
+                self.origin[2] + bbox_size*nx[2] + bbox_size*ny[2] + bbox_size*nz[2],
+            ],
+            [
+                self.origin[0] - bbox_size*nx[0] + bbox_size*ny[0] + bbox_size*nz[0],
+                self.origin[1] - bbox_size*nx[1] + bbox_size*ny[1] + bbox_size*nz[1],
+                self.origin[2] - bbox_size*nx[2] + bbox_size*ny[2] + bbox_size*nz[2],
+            ],
+        ];
+        
+        let v: Vec<Vertex> = vertices.iter().map(|p| Vertex::new(p[0], p[1], p[2])).collect();
+        
+        // Create faces of the bounding box (oriented so normals point outward)
+        let edge = |start: &Vertex, end: &Vertex| Edge {
+            start: start.clone(),
+            end: end.clone(),
+            curve_type: CurveType::Line,
+        };
+        
+        // Back face (z = -bbox_size), normal pointing outward (-Z direction in plane basis)
+        let back_wire = Wire {
+            edges: vec![edge(&v[0], &v[1]), edge(&v[1], &v[2]), edge(&v[2], &v[3]), edge(&v[3], &v[0])],
+            closed: true,
+        };
+        let back_face = Face {
+            outer_wire: back_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: [-nz[0], -nz[1], -nz[2]],
+            },
+        };
+        
+        // Front face (z = +bbox_size), normal pointing outward (+Z direction)
+        let front_wire = Wire {
+            edges: vec![edge(&v[4], &v[7]), edge(&v[7], &v[6]), edge(&v[6], &v[5]), edge(&v[5], &v[4])],
+            closed: true,
+        };
+        let front_face = Face {
+            outer_wire: front_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: nz,
+            },
+        };
+        
+        // Side faces (perpendicular to the plane)
+        // Bottom (Y = -bbox_size)
+        let bottom_wire = Wire {
+            edges: vec![edge(&v[0], &v[4]), edge(&v[4], &v[5]), edge(&v[5], &v[1]), edge(&v[1], &v[0])],
+            closed: true,
+        };
+        let bottom_face = Face {
+            outer_wire: bottom_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: [-ny[0], -ny[1], -ny[2]],
+            },
+        };
+        
+        // Top (Y = +bbox_size)
+        let top_wire = Wire {
+            edges: vec![edge(&v[3], &v[2]), edge(&v[2], &v[6]), edge(&v[6], &v[7]), edge(&v[7], &v[3])],
+            closed: true,
+        };
+        let top_face = Face {
+            outer_wire: top_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: ny,
+            },
+        };
+        
+        // Left (X = -bbox_size)
+        let left_wire = Wire {
+            edges: vec![edge(&v[0], &v[3]), edge(&v[3], &v[7]), edge(&v[7], &v[4]), edge(&v[4], &v[0])],
+            closed: true,
+        };
+        let left_face = Face {
+            outer_wire: left_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: [-nx[0], -nx[1], -nx[2]],
+            },
+        };
+        
+        // Right (X = +bbox_size)
+        let right_wire = Wire {
+            edges: vec![edge(&v[1], &v[5]), edge(&v[5], &v[6]), edge(&v[6], &v[2]), edge(&v[2], &v[1])],
+            closed: true,
+        };
+        let right_face = Face {
+            outer_wire: right_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: self.origin,
+                normal: nx,
+            },
+        };
+        
+        let shell = Shell {
+            faces: vec![back_face, front_face, bottom_face, top_face, left_face, right_face],
+            closed: true,
+        };
+        
+        let solid = Solid {
+            outer_shell: shell,
+            inner_shells: vec![],
+        };
+        
+        Ok(solid)
+    }
+}
+
+/// Create a half-space solid
+/// 
+/// A half-space is an infinite solid bounded by a plane.
+/// It can be used to cut other solids via boolean operations.
+/// 
+/// # Arguments
+/// * `origin` - A point on the plane
+/// * `normal` - Normal vector pointing toward the inside of the half-space
+/// * `bbox_size` - Size of the bounding box used to approximate the infinite half-space
+/// 
+/// # Returns
+/// A Solid representing the half-space (as a large box)
+pub fn make_half_space(origin: [f64; 3], normal: [f64; 3], bbox_size: f64) -> Result<Solid> {
+    let half_space = HalfSpace::new(origin, normal)?;
+    half_space.to_solid(bbox_size)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -799,5 +1074,73 @@ mod tests {
     fn test_sphere_invalid_radius() {
         assert!(make_sphere(-1.0).is_err());
         assert!(make_sphere(0.0).is_err());
+    }
+    
+    #[test]
+    fn test_half_space_creation() {
+        // Create a half-space with normal pointing up
+        let hs = HalfSpace::new([0.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+        assert!(hs.is_ok());
+        let hs = hs.unwrap();
+        assert_eq!(hs.origin, [0.0, 0.0, 0.0]);
+        assert_eq!(hs.normal, [0.0, 0.0, 1.0]);
+    }
+    
+    #[test]
+    fn test_half_space_invalid_normal() {
+        // Create a half-space with zero normal (should fail)
+        let hs = HalfSpace::new([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        assert!(hs.is_err());
+    }
+    
+    #[test]
+    fn test_half_space_contains_point() {
+        let hs = HalfSpace::new([0.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        
+        // Points above the plane should be inside
+        assert!(hs.contains_point([0.0, 0.0, 1.0]));
+        assert!(hs.contains_point([1.0, 1.0, 1.0]));
+        
+        // Points below should be outside
+        assert!(!hs.contains_point([0.0, 0.0, -1.0]));
+        assert!(!hs.contains_point([1.0, 1.0, -1.0]));
+        
+        // Point on the plane should be inside (boundary)
+        assert!(hs.contains_point([0.0, 0.0, 0.0]));
+    }
+    
+    #[test]
+    fn test_half_space_normal_normalization() {
+        // Create with non-unit normal
+        let hs = HalfSpace::new([0.0, 0.0, 0.0], [0.0, 0.0, 5.0]).unwrap();
+        
+        // Normal should be normalized
+        let len = hs.normal[0]*hs.normal[0] + hs.normal[1]*hs.normal[1] + hs.normal[2]*hs.normal[2];
+        assert!((len - 1.0).abs() < 1e-6);
+        assert!((hs.normal[2] - 1.0).abs() < 1e-6);
+    }
+    
+    #[test]
+    fn test_half_space_to_solid() {
+        let hs = HalfSpace::new([0.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let solid = hs.to_solid(10.0);
+        assert!(solid.is_ok());
+        let solid = solid.unwrap();
+        
+        // Check that it's a closed solid
+        assert!(solid.outer_shell.closed);
+        assert_eq!(solid.outer_shell.faces.len(), 6); // Box has 6 faces
+    }
+    
+    #[test]
+    fn test_make_half_space() {
+        let solid = make_half_space([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 5.0);
+        assert!(solid.is_ok());
+    }
+    
+    #[test]
+    fn test_make_half_space_invalid_bbox() {
+        let solid = make_half_space([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.0);
+        assert!(solid.is_err());
     }
 }

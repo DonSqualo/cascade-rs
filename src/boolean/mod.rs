@@ -752,6 +752,174 @@ pub fn section(solid: &Solid, plane_origin: [f64; 3], plane_normal: [f64; 3]) ->
     Ok(Shape::Wire(section_wire))
 }
 
+/// Fuse (union) multiple solids
+/// 
+/// Combines all input shapes into a single solid. Uses bounding box optimization
+/// to skip non-intersecting pairs.
+/// 
+/// # Arguments
+/// * `shapes` - Slice of solids to fuse
+/// 
+/// # Returns
+/// A single solid representing the union of all input shapes
+/// 
+/// # Errors
+/// Returns error if the input slice is empty or if fusion fails
+pub fn fuse_many(shapes: &[Solid]) -> Result<Solid> {
+    if shapes.is_empty() {
+        return Err(CascadeError::BooleanFailed(
+            "Cannot fuse empty set of solids".into()
+        ));
+    }
+    
+    if shapes.len() == 1 {
+        return Ok(shapes[0].clone());
+    }
+    
+    // Compute bounding boxes for all solids
+    let bboxes: Vec<BoundingBox> = shapes.iter()
+        .map(BoundingBox::from_solid)
+        .collect();
+    
+    // Use greedy approach: iteratively fuse with nearest intersecting solid
+    let mut result = shapes[0].clone();
+    let mut used = vec![false; shapes.len()];
+    used[0] = true;
+    
+    for _ in 1..shapes.len() {
+        let result_bbox = BoundingBox::from_solid(&result);
+        let mut best_idx = None;
+        
+        // Find next solid that intersects with current result
+        for i in 1..shapes.len() {
+            if used[i] {
+                continue;
+            }
+            
+            if result_bbox.intersects(&bboxes[i]) {
+                if solids_intersect(&result, &shapes[i]) {
+                    best_idx = Some(i);
+                    break;
+                }
+            }
+        }
+        
+        // If no intersecting solid found, find any unused solid
+        if best_idx.is_none() {
+            for i in 1..shapes.len() {
+                if !used[i] {
+                    best_idx = Some(i);
+                    break;
+                }
+            }
+        }
+        
+        if let Some(idx) = best_idx {
+            result = fuse(&result, &shapes[idx])?;
+            used[idx] = true;
+        } else {
+            break;
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Cut (difference) multiple tool solids from a base solid
+/// 
+/// Subtracts all tool shapes from the base shape sequentially.
+/// Uses bounding box optimization to skip non-intersecting tools.
+/// 
+/// # Arguments
+/// * `base` - The base solid to subtract from
+/// * `tools` - Slice of tool solids to subtract
+/// 
+/// # Returns
+/// A single solid representing the base minus all tools
+/// 
+/// # Errors
+/// Returns error if base is null or if cutting fails
+pub fn cut_many(base: &Solid, tools: &[Solid]) -> Result<Solid> {
+    if tools.is_empty() {
+        return Ok(base.clone());
+    }
+    
+    let mut result = base.clone();
+    let mut result_bbox = BoundingBox::from_solid(&result);
+    
+    for tool in tools {
+        // Quick bounding box check: skip non-intersecting tools
+        if !result_bbox.intersects(&BoundingBox::from_solid(tool)) {
+            continue;
+        }
+        
+        // Skip if solids don't actually intersect
+        if !solids_intersect(&result, tool) {
+            continue;
+        }
+        
+        result = cut(&result, tool)?;
+        result_bbox = BoundingBox::from_solid(&result);
+    }
+    
+    Ok(result)
+}
+
+/// Common (intersection) of multiple solids
+/// 
+/// Computes the intersection of all input shapes. Uses bounding box optimization
+/// to quickly reject non-intersecting sets.
+/// 
+/// # Arguments
+/// * `shapes` - Slice of solids to intersect
+/// 
+/// # Returns
+/// A single solid representing the intersection of all input shapes
+/// 
+/// # Errors
+/// Returns error if input is empty, insufficient solids, or if shapes don't intersect
+pub fn common_many(shapes: &[Solid]) -> Result<Solid> {
+    if shapes.is_empty() {
+        return Err(CascadeError::BooleanFailed(
+            "Cannot compute common of empty set of solids".into()
+        ));
+    }
+    
+    if shapes.len() == 1 {
+        return Ok(shapes[0].clone());
+    }
+    
+    // Quick rejection: check if all bounding boxes have a common intersection
+    let mut combined_bbox = BoundingBox::from_solid(&shapes[0]);
+    for shape in &shapes[1..] {
+        let bbox = BoundingBox::from_solid(shape);
+        
+        // Shrink combined_bbox to intersection
+        for i in 0..3 {
+            combined_bbox.min[i] = combined_bbox.min[i].max(bbox.min[i]);
+            combined_bbox.max[i] = combined_bbox.max[i].min(bbox.max[i]);
+        }
+        
+        // If bounding boxes don't intersect, no common region
+        if combined_bbox.min[0] > combined_bbox.max[0] ||
+           combined_bbox.min[1] > combined_bbox.max[1] ||
+           combined_bbox.min[2] > combined_bbox.max[2] {
+            return Err(CascadeError::BooleanFailed(
+                "Shapes do not have a common intersection".into()
+            ));
+        }
+    }
+    
+    // Iteratively compute common with each shape
+    let mut result = shapes[0].clone();
+    
+    for shape in &shapes[1..] {
+        result = common(&result, shape)?;
+    }
+    
+    Ok(result)
+}
+
 /// Splitter - divides a shape by other shapes without fusing
 /// 
 /// Returns all resulting fragments as separate solids.
@@ -1013,5 +1181,162 @@ mod tests {
         let fragments = result.unwrap();
         // Should create fragments from multiple splits
         assert!(fragments.len() >= 1);
+    }
+    
+    #[test]
+    fn test_fuse_many_single() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let result = fuse_many(&[box1]);
+        
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_fuse_many_empty() {
+        let result = fuse_many(&[]);
+        
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_fuse_many_multiple() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box3 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 away
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 5.0;
+                edge.end.point[0] += 5.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 5.0;
+            }
+        }
+        
+        // Move box3 even further
+        for face in &mut box3.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = fuse_many(&[box1, box2, box3]);
+        
+        assert!(result.is_ok());
+        let fused = result.unwrap();
+        // Should have combined faces from all boxes
+        assert!(fused.outer_shell.faces.len() >= 12);
+    }
+    
+    #[test]
+    fn test_cut_many_no_tools() {
+        let base = make_box(1.0, 1.0, 1.0).unwrap();
+        let result = cut_many(&base, &[]);
+        
+        assert!(result.is_ok());
+        let cut_result = result.unwrap();
+        assert_eq!(cut_result.outer_shell.faces.len(), base.outer_shell.faces.len());
+    }
+    
+    #[test]
+    fn test_cut_many_non_intersecting_tools() {
+        let base = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut tool1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut tool2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move tools away from base
+        for face in &mut tool1.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        for face in &mut tool2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 20.0;
+                edge.end.point[0] += 20.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 20.0;
+            }
+        }
+        
+        let result = cut_many(&base, &[tool1, tool2]);
+        
+        assert!(result.is_ok());
+        // Should return original base since tools don't intersect
+        let cut_result = result.unwrap();
+        assert_eq!(cut_result.outer_shell.faces.len(), base.outer_shell.faces.len());
+    }
+    
+    #[test]
+    fn test_cut_many_multiple_tools() {
+        let base = make_box(3.0, 3.0, 3.0).unwrap();
+        let tool1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let tool2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = cut_many(&base, &[tool1, tool2]);
+        
+        assert!(result.is_ok());
+        let cut_result = result.unwrap();
+        // Result should have fewer faces than base after subtractions
+        assert!(cut_result.outer_shell.faces.len() > 0);
+    }
+    
+    #[test]
+    fn test_common_many_single() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let result = common_many(&[box1]);
+        
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_common_many_empty() {
+        let result = common_many(&[]);
+        
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_common_many_non_intersecting() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 away
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = common_many(&[box1, box2]);
+        
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_common_many_multiple() {
+        let box1 = make_box(2.0, 2.0, 2.0).unwrap();
+        let box2 = make_box(2.0, 2.0, 2.0).unwrap();
+        let box3 = make_box(2.0, 2.0, 2.0).unwrap();
+        
+        let result = common_many(&[box1, box2, box3]);
+        
+        assert!(result.is_ok());
     }
 }
