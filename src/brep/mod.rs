@@ -495,6 +495,30 @@ impl SurfaceType {
         }
     }
     
+    /// Create a RectangularTrimmedSurface from a basis surface and parameter bounds
+    /// 
+    /// # Arguments
+    /// * `basis_surface` - The underlying surface to be trimmed
+    /// * `u1` - First u parameter of the trimmed region
+    /// * `u2` - Second u parameter of the trimmed region
+    /// * `v1` - First v parameter of the trimmed region
+    /// * `v2` - Second v parameter of the trimmed region
+    pub fn rectangular_trimmed(
+        basis_surface: SurfaceType,
+        u1: f64,
+        u2: f64,
+        v1: f64,
+        v2: f64,
+    ) -> Self {
+        SurfaceType::RectangularTrimmedSurface {
+            basis_surface: Box::new(basis_surface),
+            u1,
+            u2,
+            v1,
+            v2,
+        }
+    }
+    
     /// Create a Bezier surface from a 2D grid of control points
     /// 
     /// # Arguments
@@ -532,6 +556,36 @@ impl SurfaceType {
     pub fn extrusion_direction(&self) -> Option<[f64; 3]> {
         match self {
             SurfaceType::SurfaceOfLinearExtrusion { direction, .. } => Some(*direction),
+            _ => None,
+        }
+    }
+    
+    /// Get the basis surface of a trimmed or offset surface
+    /// Returns None if this is not a RectangularTrimmedSurface or OffsetSurface
+    pub fn basis_surface(&self) -> Option<&SurfaceType> {
+        match self {
+            SurfaceType::RectangularTrimmedSurface { basis_surface, .. } => Some(basis_surface),
+            SurfaceType::OffsetSurface { basis_surface, .. } => Some(basis_surface),
+            _ => None,
+        }
+    }
+    
+    /// Get the parameter bounds of a rectangular trimmed surface
+    /// Returns (u1, u2, v1, v2) if this is a RectangularTrimmedSurface, None otherwise
+    pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
+        match self {
+            SurfaceType::RectangularTrimmedSurface { u1, u2, v1, v2, .. } => {
+                Some((*u1, *u2, *v1, *v2))
+            }
+            _ => None,
+        }
+    }
+    
+    /// Get the offset distance of an offset surface
+    /// Returns None if this is not an OffsetSurface
+    pub fn offset_distance(&self) -> Option<f64> {
+        match self {
+            SurfaceType::OffsetSurface { offset_distance, .. } => Some(*offset_distance),
             _ => None,
         }
     }
@@ -1362,5 +1416,115 @@ mod tests {
         let control_points: Vec<Vec<[f64; 3]>> = vec![];
         let result = SurfaceType::bezier(control_points);
         assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_offset_surface_plane() {
+        // Create a plane at origin with normal pointing in +Z direction
+        let basis = SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        };
+        
+        // Create an offset surface with positive offset
+        let offset_surface = SurfaceType::OffsetSurface {
+            basis_surface: Box::new(basis),
+            offset_distance: 5.0,
+        };
+        
+        // Check getter methods
+        assert!(offset_surface.basis_surface().is_some());
+        assert_eq!(offset_surface.offset(), Some(5.0));
+        
+        // Evaluate point on offset surface
+        // Since the basis is a plane at origin, the offset point should be at z=5
+        let pt = offset_surface.point_at(0.5, 0.5);
+        assert!((pt[2] - 5.0).abs() < 1e-9, "Expected z=5, got z={}", pt[2]);
+        
+        // Normal should be same as basis surface
+        let normal = offset_surface.normal_at(0.5, 0.5);
+        let basis_normal = basis.normal_at(0.5, 0.5);
+        assert!((normal[0] - basis_normal[0]).abs() < 1e-9);
+        assert!((normal[1] - basis_normal[1]).abs() < 1e-9);
+        assert!((normal[2] - basis_normal[2]).abs() < 1e-9);
+    }
+    
+    #[test]
+    fn test_offset_surface_sphere() {
+        // Create a sphere with radius 5
+        let basis = SurfaceType::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 5.0,
+        };
+        
+        // Create an offset surface with offset of 2
+        let offset_surface = SurfaceType::OffsetSurface {
+            basis_surface: Box::new(basis.clone()),
+            offset_distance: 2.0,
+        };
+        
+        // At (u=0.5, v=0.5), the basis sphere point and offset point should differ by ~2 in the normal direction
+        let basis_pt = basis.point_at(0.5, 0.5);
+        let offset_pt = offset_surface.point_at(0.5, 0.5);
+        let basis_normal = basis.normal_at(0.5, 0.5);
+        
+        // The difference should be approximately 2 * normal
+        let diff = [
+            offset_pt[0] - basis_pt[0],
+            offset_pt[1] - basis_pt[1],
+            offset_pt[2] - basis_pt[2],
+        ];
+        
+        let expected_diff = [
+            2.0 * basis_normal[0],
+            2.0 * basis_normal[1],
+            2.0 * basis_normal[2],
+        ];
+        
+        for i in 0..3 {
+            assert!((diff[i] - expected_diff[i]).abs() < 1e-9,
+                   "Difference mismatch at index {}: expected {}, got {}", i, expected_diff[i], diff[i]);
+        }
+    }
+    
+    #[test]
+    fn test_offset_surface_negative_offset() {
+        // Create a cylinder
+        let basis = SurfaceType::Cylinder {
+            origin: [0.0, 0.0, 0.0],
+            axis: [0.0, 0.0, 1.0],
+            radius: 10.0,
+        };
+        
+        // Create an offset surface with negative offset (inward)
+        let offset_surface = SurfaceType::OffsetSurface {
+            basis_surface: Box::new(basis.clone()),
+            offset_distance: -2.0,
+        };
+        
+        // Check that offset distance is negative
+        assert_eq!(offset_surface.offset(), Some(-2.0));
+        
+        // Evaluate and verify the offset is applied
+        let basis_pt = basis.point_at(0.5, 0.5);
+        let offset_pt = offset_surface.point_at(0.5, 0.5);
+        let basis_normal = basis.normal_at(0.5, 0.5);
+        
+        // The offset point should be 2 units inward along the normal
+        let diff = [
+            offset_pt[0] - basis_pt[0],
+            offset_pt[1] - basis_pt[1],
+            offset_pt[2] - basis_pt[2],
+        ];
+        
+        let expected_diff = [
+            -2.0 * basis_normal[0],
+            -2.0 * basis_normal[1],
+            -2.0 * basis_normal[2],
+        ];
+        
+        for i in 0..3 {
+            assert!((diff[i] - expected_diff[i]).abs() < 1e-9);
+        }
     }
 }
