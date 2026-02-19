@@ -242,8 +242,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 81 features  
-**Remaining:** 85 features  
+**Implemented:** 82 features  
+**Remaining:** 84 features  
 **Total:** 166 features  
 **Completion:** 49%
 
