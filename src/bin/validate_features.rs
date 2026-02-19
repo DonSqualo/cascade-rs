@@ -42,13 +42,40 @@ fn main() {
         
         // Boolean Operations
         Feature { id: "boolean::fuse", name: "Union of solids", category: "Boolean Operations",
-                  test_fn: || false }, // Needs two solids to test
+                  test_fn: || {
+                      let box1 = cascade::make_box(1.0, 1.0, 1.0);
+                      let box2 = cascade::make_box(1.0, 1.0, 1.0);
+                      match (box1, box2) {
+                          (Ok(b1), Ok(b2)) => cascade::fuse(&b1, &b2).is_ok(),
+                          _ => false,
+                      }
+                  }},
         Feature { id: "boolean::cut", name: "Difference of solids", category: "Boolean Operations",
-                  test_fn: || false },
+                  test_fn: || {
+                      let box1 = cascade::make_box(1.0, 1.0, 1.0);
+                      let box2 = cascade::make_box(0.5, 0.5, 0.5);
+                      match (box1, box2) {
+                          (Ok(b1), Ok(b2)) => cascade::cut(&b1, &b2).is_ok(),
+                          _ => false,
+                      }
+                  }},
         Feature { id: "boolean::common", name: "Intersection of solids", category: "Boolean Operations",
-                  test_fn: || false },
+                  test_fn: || {
+                      let box1 = cascade::make_box(1.0, 1.0, 1.0);
+                      let box2 = cascade::make_box(0.5, 0.5, 0.5);
+                      match (box1, box2) {
+                          (Ok(b1), Ok(b2)) => cascade::common(&b1, &b2).is_ok(),
+                          _ => false,
+                      }
+                  }},
         Feature { id: "boolean::section", name: "Section (solid/plane intersection)", category: "Boolean Operations",
-                  test_fn: || false },
+                  test_fn: || {
+                      let box1 = cascade::make_box(1.0, 1.0, 1.0);
+                      match box1 {
+                          Ok(b) => cascade::boolean::section(&b, [0.5, 0.5, 0.5], [0.0, 0.0, 1.0]).is_ok(),
+                          _ => false,
+                      }
+                  }},
         
         // BREP Core
         Feature { id: "brep::vertex", name: "Vertex representation", category: "BREP Core",

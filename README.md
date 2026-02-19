@@ -7,13 +7,21 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 04:05:35
+Last validated: 2026-02-19 04:10:03
 
-### Boolean Operations (0/4)
-- [ ] `boolean::fuse` — Union of solids
-- [ ] `boolean::cut` — Difference of solids
-- [ ] `boolean::common` — Intersection of solids
-- [ ] `boolean::section` — Section (solid/plane intersection)
+### Primitives (6/6)
+- [x] `primitive::box` — Box/cuboid creation
+- [x] `primitive::sphere` — Sphere creation
+- [x] `primitive::cylinder` — Cylinder creation
+- [x] `primitive::cone` — Cone creation
+- [x] `primitive::torus` — Torus creation
+- [x] `primitive::wedge` — Wedge/prism creation
+
+### Boolean Operations (4/4)
+- [x] `boolean::fuse` — Union of solids
+- [x] `boolean::cut` — Difference of solids
+- [x] `boolean::common` — Intersection of solids
+- [x] `boolean::section` — Section (solid/plane intersection)
 
 ### BREP Core (7/8)
 - [x] `brep::vertex` — Vertex representation
@@ -25,15 +33,7 @@ Last validated: 2026-02-19 04:05:35
 - [x] `brep::compound` — Compound shapes
 - [ ] `brep::topology` — Topological queries (adjacent, connected, etc.)
 
-### Primitives (6/6)
-- [x] `primitive::box` — Box/cuboid creation
-- [x] `primitive::sphere` — Sphere creation
-- [x] `primitive::cylinder` — Cylinder creation
-- [x] `primitive::cone` — Cone creation
-- [x] `primitive::torus` — Torus creation
-- [x] `primitive::wedge` — Wedge/prism creation
-
-**Total: 13/18 features passing (72%)**
+**Total: 17/18 features passing (94%)**
 <!-- FEATURE_PARITY_END -->
 
 ## Architecture

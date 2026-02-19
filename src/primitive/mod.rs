@@ -23,42 +23,30 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
     }
     
     // Create 8 vertices at the corners of the box
-    // Bottom face (z=0)
+    // Bottom face (z=0): v0-v1-v2-v3
+    // Top face (z=dz): v4-v5-v6-v7
     let v0 = Vertex::new(0.0, 0.0, 0.0);
     let v1 = Vertex::new(dx, 0.0, 0.0);
     let v2 = Vertex::new(dx, dy, 0.0);
     let v3 = Vertex::new(0.0, dy, 0.0);
-    
-    // Top face (z=dz)
     let v4 = Vertex::new(0.0, 0.0, dz);
     let v5 = Vertex::new(dx, 0.0, dz);
     let v6 = Vertex::new(dx, dy, dz);
     let v7 = Vertex::new(0.0, dy, dz);
     
-    // Create 12 edges
-    // Bottom face edges (z=0)
-    let e0 = Edge { start: v0.clone(), end: v1.clone(), curve_type: CurveType::Line };
-    let e1 = Edge { start: v1.clone(), end: v2.clone(), curve_type: CurveType::Line };
-    let e2 = Edge { start: v2.clone(), end: v3.clone(), curve_type: CurveType::Line };
-    let e3 = Edge { start: v3.clone(), end: v0.clone(), curve_type: CurveType::Line };
+    // Helper to create an edge
+    let edge = |start: &Vertex, end: &Vertex| Edge {
+        start: start.clone(),
+        end: end.clone(),
+        curve_type: CurveType::Line,
+    };
     
-    // Top face edges (z=dz)
-    let e4 = Edge { start: v4.clone(), end: v5.clone(), curve_type: CurveType::Line };
-    let e5 = Edge { start: v5.clone(), end: v6.clone(), curve_type: CurveType::Line };
-    let e6 = Edge { start: v6.clone(), end: v7.clone(), curve_type: CurveType::Line };
-    let e7 = Edge { start: v7.clone(), end: v4.clone(), curve_type: CurveType::Line };
+    // Create faces with properly connected edges forming closed loops
+    // Each wire's edges form a connected chain: e0.end = e1.start, etc.
     
-    // Vertical edges
-    let e8 = Edge { start: v0.clone(), end: v4.clone(), curve_type: CurveType::Line };
-    let e9 = Edge { start: v1.clone(), end: v5.clone(), curve_type: CurveType::Line };
-    let e10 = Edge { start: v2.clone(), end: v6.clone(), curve_type: CurveType::Line };
-    let e11 = Edge { start: v3.clone(), end: v7.clone(), curve_type: CurveType::Line };
-    
-    // Create 6 faces
-    
-    // Bottom face (z=0) - normal pointing down
+    // Bottom face (z=0) - vertices v0, v1, v2, v3 - normal pointing down (-Z)
     let bottom_wire = Wire {
-        edges: vec![e0.clone(), e1.clone(), e2.clone(), e3.clone()],
+        edges: vec![edge(&v0, &v1), edge(&v1, &v2), edge(&v2, &v3), edge(&v3, &v0)],
         closed: true,
     };
     let bottom_face = Face {
@@ -70,9 +58,9 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         },
     };
     
-    // Top face (z=dz) - normal pointing up
+    // Top face (z=dz) - vertices v4, v5, v6, v7 - normal pointing up (+Z)
     let top_wire = Wire {
-        edges: vec![e4.clone(), e5.clone(), e6.clone(), e7.clone()],
+        edges: vec![edge(&v4, &v5), edge(&v5, &v6), edge(&v6, &v7), edge(&v7, &v4)],
         closed: true,
     };
     let top_face = Face {
@@ -84,9 +72,9 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         },
     };
     
-    // Front face (y=0) - normal pointing back (negative Y)
+    // Front face (y=0) - vertices v0, v1, v5, v4 - normal pointing front (-Y)
     let front_wire = Wire {
-        edges: vec![e0.clone(), e9.clone(), e4.clone(), e8.clone()],
+        edges: vec![edge(&v0, &v1), edge(&v1, &v5), edge(&v5, &v4), edge(&v4, &v0)],
         closed: true,
     };
     let front_face = Face {
@@ -98,9 +86,9 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         },
     };
     
-    // Back face (y=dy) - normal pointing forward (positive Y)
+    // Back face (y=dy) - vertices v3, v2, v6, v7 - normal pointing back (+Y)
     let back_wire = Wire {
-        edges: vec![e3.clone(), e7.clone(), e6.clone(), e2.clone()],
+        edges: vec![edge(&v3, &v2), edge(&v2, &v6), edge(&v6, &v7), edge(&v7, &v3)],
         closed: true,
     };
     let back_face = Face {
@@ -112,9 +100,9 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         },
     };
     
-    // Left face (x=0) - normal pointing left (negative X)
+    // Left face (x=0) - vertices v0, v4, v7, v3 - normal pointing left (-X)
     let left_wire = Wire {
-        edges: vec![e8.clone(), e7.clone(), e3.clone(), e11.clone()],
+        edges: vec![edge(&v0, &v4), edge(&v4, &v7), edge(&v7, &v3), edge(&v3, &v0)],
         closed: true,
     };
     let left_face = Face {
@@ -126,9 +114,9 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         },
     };
     
-    // Right face (x=dx) - normal pointing right (positive X)
+    // Right face (x=dx) - vertices v1, v2, v6, v5 - normal pointing right (+X)
     let right_wire = Wire {
-        edges: vec![e1.clone(), e10.clone(), e5.clone(), e9.clone()],
+        edges: vec![edge(&v1, &v2), edge(&v2, &v6), edge(&v6, &v5), edge(&v5, &v1)],
         closed: true,
     };
     let right_face = Face {
