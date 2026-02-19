@@ -242,16 +242,18 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** ~39 features
-**Total OCCT Features:** ~200+ core features
+**Implemented:** 78 features  
+**Remaining:** 88 features  
+**Total:** 166 features  
+**Completion:** 47%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
-2. More curve/surface types (BSpline intersection)
-3. Full STEP compliance
-4. IGES support
+2. RectangularTrimmedSurface, OffsetSurface, PlateSurface
+3. Explorer/Builder/Modifier (topology manipulation)
+4. Full STEP/IGES compliance
 5. Point/curve/surface projection operations
 
 ---
 
-*Last updated: 2026-02-23 - Implemented SurfaceOfRevolution for rotating curves around an axis*
+*Last updated: 2026-02-19 - Added BezierSurface, SurfaceOfLinearExtrusion, OffsetCurve, Hyperbola*
