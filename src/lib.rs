@@ -14,6 +14,7 @@ pub mod query;
 
 // Re-exports for convenience
 pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
+pub use brep::topology;
 pub use primitive::{make_box, make_sphere, make_cylinder, make_cone, make_torus};
 pub use boolean::{fuse, cut, common};
 

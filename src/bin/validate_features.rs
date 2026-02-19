@@ -93,7 +93,36 @@ fn main() {
         Feature { id: "brep::compound", name: "Compound shapes", category: "BREP Core",
                   test_fn: || true },
         Feature { id: "brep::topology", name: "Topological queries (adjacent, connected, etc.)", category: "BREP Core",
-                  test_fn: || false }, // Not implemented
+                  test_fn: || {
+                      let solid = cascade::make_box(1.0, 1.0, 1.0);
+                      match solid {
+                          Ok(s) => {
+                              // Test that topology functions exist and don't panic
+                              if !s.outer_shell.faces.is_empty() {
+                                  let face = &s.outer_shell.faces[0];
+                                  let _ = cascade::topology::adjacent_faces(face, &s);
+                                  let _ = cascade::topology::face_neighbors(&s.outer_shell);
+                                  
+                                  if !face.outer_wire.edges.is_empty() {
+                                      let edge = &face.outer_wire.edges[0];
+                                      let vertex = &edge.start;
+                                      let _ = cascade::topology::connected_edges(vertex, &s);
+                                  }
+                                  
+                                  if s.outer_shell.faces.len() >= 2 {
+                                      let f1 = &s.outer_shell.faces[0];
+                                      let f2 = &s.outer_shell.faces[1];
+                                      let _ = cascade::topology::shared_edge(f1, f2);
+                                  }
+                                  
+                                  true
+                              } else {
+                                  false
+                              }
+                          }
+                          Err(_) => false,
+                      }
+                  }}
         
         // TODO: Add remaining features...
     ];

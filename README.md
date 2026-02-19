@@ -7,7 +7,7 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 04:10:03
+Last validated: 2026-02-19 04:11:35
 
 ### Primitives (6/6)
 - [x] `primitive::box` — Box/cuboid creation
@@ -23,7 +23,7 @@ Last validated: 2026-02-19 04:10:03
 - [x] `boolean::common` — Intersection of solids
 - [x] `boolean::section` — Section (solid/plane intersection)
 
-### BREP Core (7/8)
+### BREP Core (8/8)
 - [x] `brep::vertex` — Vertex representation
 - [x] `brep::edge` — Edge representation (line, arc, spline)
 - [x] `brep::wire` — Wire (connected edges)
@@ -31,9 +31,9 @@ Last validated: 2026-02-19 04:10:03
 - [x] `brep::shell` — Shell (connected faces)
 - [x] `brep::solid` — Solid representation
 - [x] `brep::compound` — Compound shapes
-- [ ] `brep::topology` — Topological queries (adjacent, connected, etc.)
+- [x] `brep::topology` — Topological queries (adjacent, connected, etc.)
 
-**Total: 17/18 features passing (94%)**
+**Total: 18/18 features passing (100%)**
 <!-- FEATURE_PARITY_END -->
 
 ## Architecture

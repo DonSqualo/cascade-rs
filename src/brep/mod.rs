@@ -1,5 +1,7 @@
 //! BREP (Boundary Representation) data structures
 
+pub mod topology;
+
 use nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
 
