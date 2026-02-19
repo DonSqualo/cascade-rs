@@ -112,6 +112,9 @@ fn collect_vertices(shape: &Shape, vertices: &mut Vec<[f64; 3]>) {
                 collect_vertices(&Shape::Solid(solid.clone()), vertices);
             }
         }
+        Shape::CompSolid(_) => {
+            // CompSolid is not yet implemented, skip
+        }
     }
 }
 

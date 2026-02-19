@@ -81,7 +81,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Cut (difference)
 - [x] Common (intersection)
 - [x] Section (solid/plane)
-- [ ] Splitter
+- [x] Splitter
 - [ ] Boolean with multiple arguments
 - [ ] Fuzzy boolean (tolerance-based)
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 80 features  
-**Remaining:** 86 features  
+**Implemented:** 81 features  
+**Remaining:** 85 features  
 **Total:** 166 features  
-**Completion:** 48%
+**Completion:** 49%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)

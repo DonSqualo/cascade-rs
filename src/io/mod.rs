@@ -69,6 +69,9 @@ impl<W: Write> StepWriter<W> {
             Shape::Compound(c) => {
                 self.add_compound(c);
             }
+            Shape::CompSolid(_) => {
+                // CompSolid not yet fully implemented
+            }
         }
         
         self.write_file()?;

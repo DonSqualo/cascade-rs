@@ -658,6 +658,283 @@ pub struct Compound {
     pub solids: Vec<Solid>,
 }
 
+/// A composite solid (CompSolid) is a collection of solids sharing common faces
+///
+/// Unlike a Compound which can contain any shapes with no topological relationship,
+/// a CompSolid is specifically a collection of solids that must share at least one face
+/// with each other, forming a cohesive topological unit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompSolid {
+    /// The constituent solids
+    solids: Vec<Solid>,
+    /// Map of shared faces: key is face index pair (solid_i, face_i) -> (solid_j, face_j)
+    /// This tracks which faces from different solids are connected
+    shared_faces: Vec<((usize, usize), (usize, usize))>,
+}
+
+impl CompSolid {
+    /// Create a new CompSolid from a collection of solids
+    ///
+    /// Validates that the solids form a connected structure by sharing at least one face.
+    /// Returns an error if solids don't share any faces.
+    ///
+    /// # Arguments
+    /// * `solids` - Vec of solids to combine into a CompSolid
+    ///
+    /// # Returns
+    /// * `Result<CompSolid>` - The new CompSolid if valid, error otherwise
+    pub fn new(solids: Vec<Solid>) -> Result<Self> {
+        if solids.is_empty() {
+            return Err(CascadeError::TopologyError(
+                "CompSolid must contain at least one solid".to_string(),
+            ));
+        }
+        
+        if solids.len() == 1 {
+            return Err(CascadeError::TopologyError(
+                "CompSolid must contain at least two solids to form a composite".to_string(),
+            ));
+        }
+        
+        // Find all shared faces between solids
+        let shared_faces = Self::find_shared_faces(&solids);
+        
+        if shared_faces.is_empty() {
+            return Err(CascadeError::TopologyError(
+                "Solids in CompSolid must share at least one face".to_string(),
+            ));
+        }
+        
+        // Verify connectivity: all solids must be connected through shared faces
+        if !Self::is_connected(&solids, &shared_faces) {
+            return Err(CascadeError::TopologyError(
+                "Solids in CompSolid must be topologically connected through shared faces".to_string(),
+            ));
+        }
+        
+        Ok(CompSolid { solids, shared_faces })
+    }
+    
+    /// Add a solid to the CompSolid
+    ///
+    /// The new solid must share at least one face with an existing solid in the CompSolid.
+    ///
+    /// # Arguments
+    /// * `solid` - The solid to add
+    ///
+    /// # Returns
+    /// * `Result<()>` - Success if the solid was added and maintains connectivity
+    pub fn add_solid(&mut self, solid: Solid) -> Result<()> {
+        let mut new_solids = self.solids.clone();
+        new_solids.push(solid);
+        
+        let shared_faces = Self::find_shared_faces(&new_solids);
+        
+        if shared_faces.is_empty() {
+            return Err(CascadeError::TopologyError(
+                "New solid must share at least one face with existing solids".to_string(),
+            ));
+        }
+        
+        if !Self::is_connected(&new_solids, &shared_faces) {
+            return Err(CascadeError::TopologyError(
+                "Adding solid would break topological connectivity".to_string(),
+            ));
+        }
+        
+        self.solids = new_solids;
+        self.shared_faces = shared_faces;
+        Ok(())
+    }
+    
+    /// Remove a solid from the CompSolid by index
+    ///
+    /// # Arguments
+    /// * `index` - Index of the solid to remove
+    ///
+    /// # Returns
+    /// * `Result<()>` - Success if the solid was removed
+    pub fn remove_solid(&mut self, index: usize) -> Result<()> {
+        if index >= self.solids.len() {
+            return Err(CascadeError::TopologyError(
+                format!("Solid index {} out of bounds", index),
+            ));
+        }
+        
+        if self.solids.len() <= 2 {
+            return Err(CascadeError::TopologyError(
+                "CompSolid must contain at least two solids".to_string(),
+            ));
+        }
+        
+        let mut new_solids = self.solids.clone();
+        new_solids.remove(index);
+        
+        // Update shared faces indices after removal
+        let shared_faces = Self::find_shared_faces(&new_solids);
+        
+        if shared_faces.is_empty() {
+            return Err(CascadeError::TopologyError(
+                "Removing solid would result in no shared faces".to_string(),
+            ));
+        }
+        
+        if !Self::is_connected(&new_solids, &shared_faces) {
+            return Err(CascadeError::TopologyError(
+                "Removing solid would break topological connectivity".to_string(),
+            ));
+        }
+        
+        self.solids = new_solids;
+        self.shared_faces = shared_faces;
+        Ok(())
+    }
+    
+    /// Get a reference to the solids in this CompSolid
+    pub fn solids(&self) -> &[Solid] {
+        &self.solids
+    }
+    
+    /// Get a mutable reference to the solids in this CompSolid
+    pub fn solids_mut(&mut self) -> &mut [Solid] {
+        &mut self.solids
+    }
+    
+    /// Get information about shared faces
+    ///
+    /// Returns a vector of tuples where each tuple represents a pair of shared faces:
+    /// ((solid_index_1, face_index_1), (solid_index_2, face_index_2))
+    pub fn shared_faces(&self) -> &[((usize, usize), (usize, usize))] {
+        &self.shared_faces
+    }
+    
+    /// Get the number of solids in this CompSolid
+    pub fn len(&self) -> usize {
+        self.solids.len()
+    }
+    
+    /// Check if CompSolid is empty
+    pub fn is_empty(&self) -> bool {
+        self.solids.is_empty()
+    }
+    
+    /// Find all shared faces between solids
+    fn find_shared_faces(solids: &[Solid]) -> Vec<((usize, usize), (usize, usize))> {
+        let mut shared = Vec::new();
+        
+        for i in 0..solids.len() {
+            for j in (i + 1)..solids.len() {
+                let faces_i = Self::get_solid_faces(&solids[i]);
+                let faces_j = Self::get_solid_faces(&solids[j]);
+                
+                for (fi, face_i) in faces_i.iter().enumerate() {
+                    for (fj, face_j) in faces_j.iter().enumerate() {
+                        // Check if faces are the same or share edges
+                        if Self::faces_are_same(face_i, face_j) {
+                            shared.push(((i, fi), (j, fj)));
+                        }
+                    }
+                }
+            }
+        }
+        
+        shared
+    }
+    
+    /// Get all faces from a solid (outer shell + inner shells)
+    fn get_solid_faces(solid: &Solid) -> Vec<Face> {
+        let mut faces = solid.outer_shell.faces.clone();
+        for inner_shell in &solid.inner_shells {
+            faces.extend(inner_shell.faces.clone());
+        }
+        faces
+    }
+    
+    /// Check if two faces are geometrically the same
+    fn faces_are_same(face1: &Face, face2: &Face) -> bool {
+        // Two faces are the same if they have the same wires (outer + inner)
+        if face1.outer_wire.edges.len() != face2.outer_wire.edges.len() {
+            return false;
+        }
+        
+        if face1.inner_wires.len() != face2.inner_wires.len() {
+            return false;
+        }
+        
+        // Compare outer wire edges
+        for (e1, e2) in face1.outer_wire.edges.iter().zip(&face2.outer_wire.edges) {
+            if !Self::edges_equal(e1, e2) {
+                return false;
+            }
+        }
+        
+        // Compare inner wire edges
+        for (w1, w2) in face1.inner_wires.iter().zip(&face2.inner_wires) {
+            if w1.edges.len() != w2.edges.len() {
+                return false;
+            }
+            for (e1, e2) in w1.edges.iter().zip(&w2.edges) {
+                if !Self::edges_equal(e1, e2) {
+                    return false;
+                }
+            }
+        }
+        
+        true
+    }
+    
+    /// Check if two edges are equal
+    fn edges_equal(e1: &Edge, e2: &Edge) -> bool {
+        let epsilon = 1e-6;
+        Self::points_equal(&e1.start.point, &e2.start.point, epsilon)
+            && Self::points_equal(&e1.end.point, &e2.end.point, epsilon)
+    }
+    
+    /// Check if two points are equal within epsilon
+    fn points_equal(p1: &[f64; 3], p2: &[f64; 3], epsilon: f64) -> bool {
+        (p1[0] - p2[0]).abs() < epsilon
+            && (p1[1] - p2[1]).abs() < epsilon
+            && (p1[2] - p2[2]).abs() < epsilon
+    }
+    
+    /// Check if all solids are topologically connected through shared faces
+    fn is_connected(solids: &[Solid], shared_faces: &[((usize, usize), (usize, usize))]) -> bool {
+        if solids.len() <= 1 {
+            return true;
+        }
+        
+        // Build an adjacency list from shared faces
+        let mut adjacency: Vec<Vec<usize>> = vec![Vec::new(); solids.len()];
+        
+        for &((i, _), (j, _)) in shared_faces {
+            if !adjacency[i].contains(&j) {
+                adjacency[i].push(j);
+            }
+            if !adjacency[j].contains(&i) {
+                adjacency[j].push(i);
+            }
+        }
+        
+        // BFS to check connectivity
+        let mut visited = vec![false; solids.len()];
+        let mut queue = vec![0];
+        visited[0] = true;
+        let mut count = 1;
+        
+        while let Some(current) = queue.pop() {
+            for &neighbor in &adjacency[current] {
+                if !visited[neighbor] {
+                    visited[neighbor] = true;
+                    queue.push(neighbor);
+                    count += 1;
+                }
+            }
+        }
+        
+        count == solids.len()
+    }
+}
+
 /// Generic shape enum
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Shape {
@@ -668,6 +945,7 @@ pub enum Shape {
     Shell(Shell),
     Solid(Solid),
     Compound(Compound),
+    CompSolid(CompSolid),
 }
 
 impl Shape {

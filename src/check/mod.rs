@@ -150,6 +150,9 @@ pub fn check_valid(shape: &Shape) -> CheckResult<Vec<ShapeError>> {
                 }
             }
         }
+        Shape::CompSolid(_) => {
+            // CompSolid is not yet implemented
+        }
     }
     
     Ok(errors)

@@ -1,6 +1,7 @@
 //! Geometry primitives (OpenCASCADE gp_* equivalents)
 //!
 //! This module provides basic geometric types:
+//! - `XYZ` (gp_XYZ) - 3D coordinates (raw tuple)
 //! - `Pnt` (gp_Pnt) - 3D point
 //! - `Vec3` (gp_Vec) - 3D vector  
 //! - `Dir` (gp_Dir) - 3D unit vector (direction)
@@ -12,6 +13,182 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-10;
+
+/// A 3D coordinate tuple (equivalent to OpenCASCADE gp_XYZ)
+///
+/// This is a raw coordinate representation used as a building block.
+/// It is public and mutable, unlike the higher-level types (Pnt, Vec3, Dir).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct XYZ {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl XYZ {
+    /// Create a new coordinate tuple
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Zero coordinates (0, 0, 0)
+    pub fn zero() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
+
+    /// Create from array
+    pub fn from_array(arr: [f64; 3]) -> Self {
+        Self::new(arr[0], arr[1], arr[2])
+    }
+
+    /// Convert to array
+    pub fn to_array(&self) -> [f64; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    /// Add two coordinate tuples
+    pub fn add(&self, other: &XYZ) -> XYZ {
+        XYZ::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+
+    /// Subtract another coordinate tuple from this one
+    pub fn subtract(&self, other: &XYZ) -> XYZ {
+        XYZ::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    }
+
+    /// Multiply by a scalar
+    pub fn multiply(&self, scalar: f64) -> XYZ {
+        XYZ::new(self.x * scalar, self.y * scalar, self.z * scalar)
+    }
+
+    /// Divide by a scalar
+    pub fn divide(&self, scalar: f64) -> XYZ {
+        if scalar.abs() < TOLERANCE {
+            panic!("Cannot divide XYZ by zero or near-zero value");
+        }
+        XYZ::new(self.x / scalar, self.y / scalar, self.z / scalar)
+    }
+
+    /// Dot product with another coordinate tuple
+    pub fn dot(&self, other: &XYZ) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    /// Cross product with another coordinate tuple
+    pub fn cross(&self, other: &XYZ) -> XYZ {
+        XYZ::new(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
+    }
+
+    /// Magnitude (length) of this coordinate vector
+    pub fn modulus(&self) -> f64 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    /// Squared magnitude (faster, no sqrt)
+    pub fn squared_modulus(&self) -> f64 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
+
+    /// Normalize to unit length, returns None if zero vector
+    pub fn normalized(&self) -> Option<XYZ> {
+        let mag = self.modulus();
+        if mag > TOLERANCE {
+            Some(XYZ::new(self.x / mag, self.y / mag, self.z / mag))
+        } else {
+            None
+        }
+    }
+
+    /// Convert from Pnt (origin reference point is lost)
+    pub fn from_pnt(p: &Pnt) -> Self {
+        Self::new(p.x, p.y, p.z)
+    }
+
+    /// Convert to Pnt
+    pub fn to_pnt(&self) -> Pnt {
+        Pnt::new(self.x, self.y, self.z)
+    }
+
+    /// Convert from Vec3
+    pub fn from_vec3(v: &Vec3) -> Self {
+        Self::new(v.x, v.y, v.z)
+    }
+
+    /// Convert to Vec3
+    pub fn to_vec3(&self) -> Vec3 {
+        Vec3::new(self.x, self.y, self.z)
+    }
+
+    /// Convert from Dir (unit vector)
+    pub fn from_dir(d: &Dir) -> Self {
+        Self::new(d.x(), d.y(), d.z())
+    }
+
+    /// Try to convert to Dir (normalizes if needed)
+    pub fn to_dir(&self) -> Option<Dir> {
+        Dir::try_new(self.x, self.y, self.z)
+    }
+}
+
+impl Add for XYZ {
+    type Output = XYZ;
+
+    fn add(self, other: XYZ) -> XYZ {
+        XYZ::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+}
+
+impl Sub for XYZ {
+    type Output = XYZ;
+
+    fn sub(self, other: XYZ) -> XYZ {
+        XYZ::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    }
+}
+
+impl Mul<f64> for XYZ {
+    type Output = XYZ;
+
+    fn mul(self, scalar: f64) -> XYZ {
+        XYZ::new(self.x * scalar, self.y * scalar, self.z * scalar)
+    }
+}
+
+impl Mul<XYZ> for f64 {
+    type Output = XYZ;
+
+    fn mul(self, v: XYZ) -> XYZ {
+        XYZ::new(v.x * self, v.y * self, v.z * self)
+    }
+}
+
+impl From<XYZ> for [f64; 3] {
+    fn from(xyz: XYZ) -> [f64; 3] {
+        xyz.to_array()
+    }
+}
+
+impl From<[f64; 3]> for XYZ {
+    fn from(arr: [f64; 3]) -> XYZ {
+        XYZ::from_array(arr)
+    }
+}
+
+impl From<XYZ> for Pnt {
+    fn from(xyz: XYZ) -> Pnt {
+        xyz.to_pnt()
+    }
+}
+
+impl From<XYZ> for Vec3 {
+    fn from(xyz: XYZ) -> Vec3 {
+        xyz.to_vec3()
+    }
+}
 
 /// A 3D point (equivalent to OpenCASCADE gp_Pnt)
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1292,5 +1469,219 @@ mod tests {
         let vec = p2 - p1;
         assert!((vec.x - 3.0).abs() < TEST_TOL);
         assert!((vec.y - 4.0).abs() < TEST_TOL);
+    }
+
+    // ===== XYZ Tests =====
+
+    #[test]
+    fn test_xyz_creation() {
+        let xyz = XYZ::new(1.0, 2.0, 3.0);
+        assert_eq!(xyz.x, 1.0);
+        assert_eq!(xyz.y, 2.0);
+        assert_eq!(xyz.z, 3.0);
+    }
+
+    #[test]
+    fn test_xyz_zero() {
+        let xyz = XYZ::zero();
+        assert_eq!(xyz.x, 0.0);
+        assert_eq!(xyz.y, 0.0);
+        assert_eq!(xyz.z, 0.0);
+    }
+
+    #[test]
+    fn test_xyz_from_to_array() {
+        let arr = [1.5, 2.5, 3.5];
+        let xyz = XYZ::from_array(arr);
+        assert!((xyz.x - 1.5).abs() < TEST_TOL);
+        assert!((xyz.y - 2.5).abs() < TEST_TOL);
+        assert!((xyz.z - 3.5).abs() < TEST_TOL);
+
+        let arr2 = xyz.to_array();
+        assert!((arr2[0] - 1.5).abs() < TEST_TOL);
+        assert!((arr2[1] - 2.5).abs() < TEST_TOL);
+        assert!((arr2[2] - 3.5).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_add() {
+        let xyz1 = XYZ::new(1.0, 2.0, 3.0);
+        let xyz2 = XYZ::new(4.0, 5.0, 6.0);
+        let result = xyz1.add(xyz2);
+        assert!((result.x - 5.0).abs() < TEST_TOL);
+        assert!((result.y - 7.0).abs() < TEST_TOL);
+        assert!((result.z - 9.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_subtract() {
+        let xyz1 = XYZ::new(4.0, 5.0, 6.0);
+        let xyz2 = XYZ::new(1.0, 2.0, 3.0);
+        let result = xyz1.subtract(&xyz2);
+        assert!((result.x - 3.0).abs() < TEST_TOL);
+        assert!((result.y - 3.0).abs() < TEST_TOL);
+        assert!((result.z - 3.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_multiply() {
+        let xyz = XYZ::new(2.0, 3.0, 4.0);
+        let result = xyz.multiply(2.0);
+        assert!((result.x - 4.0).abs() < TEST_TOL);
+        assert!((result.y - 6.0).abs() < TEST_TOL);
+        assert!((result.z - 8.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_divide() {
+        let xyz = XYZ::new(4.0, 6.0, 8.0);
+        let result = xyz.divide(2.0);
+        assert!((result.x - 2.0).abs() < TEST_TOL);
+        assert!((result.y - 3.0).abs() < TEST_TOL);
+        assert!((result.z - 4.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot divide XYZ by zero")]
+    fn test_xyz_divide_by_zero() {
+        let xyz = XYZ::new(1.0, 2.0, 3.0);
+        let _ = xyz.divide(0.0);
+    }
+
+    #[test]
+    fn test_xyz_dot() {
+        let xyz1 = XYZ::new(1.0, 2.0, 3.0);
+        let xyz2 = XYZ::new(4.0, 5.0, 6.0);
+        let result = xyz1.dot(&xyz2);
+        // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+        assert!((result - 32.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_cross() {
+        let xyz1 = XYZ::new(1.0, 0.0, 0.0);
+        let xyz2 = XYZ::new(0.0, 1.0, 0.0);
+        let result = xyz1.cross(&xyz2);
+        assert!((result.x - 0.0).abs() < TEST_TOL);
+        assert!((result.y - 0.0).abs() < TEST_TOL);
+        assert!((result.z - 1.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_modulus() {
+        let xyz = XYZ::new(3.0, 4.0, 0.0);
+        assert!((xyz.modulus() - 5.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_squared_modulus() {
+        let xyz = XYZ::new(3.0, 4.0, 0.0);
+        assert!((xyz.squared_modulus() - 25.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_normalized() {
+        let xyz = XYZ::new(3.0, 4.0, 0.0);
+        let normalized = xyz.normalized().unwrap();
+        assert!((normalized.x - 0.6).abs() < TEST_TOL);
+        assert!((normalized.y - 0.8).abs() < TEST_TOL);
+        assert!((normalized.z - 0.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_normalized_zero() {
+        let xyz = XYZ::zero();
+        assert!(xyz.normalized().is_none());
+    }
+
+    #[test]
+    fn test_xyz_from_to_pnt() {
+        let p = Pnt::new(1.5, 2.5, 3.5);
+        let xyz = XYZ::from_pnt(&p);
+        assert!((xyz.x - 1.5).abs() < TEST_TOL);
+        assert!((xyz.y - 2.5).abs() < TEST_TOL);
+        assert!((xyz.z - 3.5).abs() < TEST_TOL);
+
+        let p2 = xyz.to_pnt();
+        assert!((p2.x - 1.5).abs() < TEST_TOL);
+        assert!((p2.y - 2.5).abs() < TEST_TOL);
+        assert!((p2.z - 3.5).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_from_to_vec3() {
+        let v = Vec3::new(1.5, 2.5, 3.5);
+        let xyz = XYZ::from_vec3(&v);
+        assert!((xyz.x - 1.5).abs() < TEST_TOL);
+        assert!((xyz.y - 2.5).abs() < TEST_TOL);
+        assert!((xyz.z - 3.5).abs() < TEST_TOL);
+
+        let v2 = xyz.to_vec3();
+        assert!((v2.x - 1.5).abs() < TEST_TOL);
+        assert!((v2.y - 2.5).abs() < TEST_TOL);
+        assert!((v2.z - 3.5).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_from_to_dir() {
+        let d = Dir::new(1.0, 0.0, 0.0);
+        let xyz = XYZ::from_dir(&d);
+        assert!((xyz.x - 1.0).abs() < TEST_TOL);
+        assert!((xyz.y - 0.0).abs() < TEST_TOL);
+        assert!((xyz.z - 0.0).abs() < TEST_TOL);
+
+        let d2 = xyz.to_dir().unwrap();
+        assert!((d2.x() - 1.0).abs() < TEST_TOL);
+        assert!((d2.y() - 0.0).abs() < TEST_TOL);
+        assert!((d2.z() - 0.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_operators() {
+        let xyz1 = XYZ::new(1.0, 2.0, 3.0);
+        let xyz2 = XYZ::new(4.0, 5.0, 6.0);
+
+        // Add
+        let sum = xyz1 + xyz2;
+        assert!((sum.x - 5.0).abs() < TEST_TOL);
+        assert!((sum.y - 7.0).abs() < TEST_TOL);
+        assert!((sum.z - 9.0).abs() < TEST_TOL);
+
+        // Sub
+        let diff = xyz1 - xyz2;
+        assert!((diff.x - (-3.0)).abs() < TEST_TOL);
+        assert!((diff.y - (-3.0)).abs() < TEST_TOL);
+        assert!((diff.z - (-3.0)).abs() < TEST_TOL);
+
+        // Mul with scalar
+        let scaled = xyz1 * 2.0;
+        assert!((scaled.x - 2.0).abs() < TEST_TOL);
+        assert!((scaled.y - 4.0).abs() < TEST_TOL);
+        assert!((scaled.z - 6.0).abs() < TEST_TOL);
+
+        // Scalar mul with vector
+        let scaled2 = 3.0 * xyz2;
+        assert!((scaled2.x - 12.0).abs() < TEST_TOL);
+        assert!((scaled2.y - 15.0).abs() < TEST_TOL);
+        assert!((scaled2.z - 18.0).abs() < TEST_TOL);
+    }
+
+    #[test]
+    fn test_xyz_conversions() {
+        let arr: [f64; 3] = XYZ::new(1.5, 2.5, 3.5).into();
+        assert!((arr[0] - 1.5).abs() < TEST_TOL);
+        assert!((arr[1] - 2.5).abs() < TEST_TOL);
+        assert!((arr[2] - 3.5).abs() < TEST_TOL);
+
+        let xyz: XYZ = [4.5, 5.5, 6.5].into();
+        assert!((xyz.x - 4.5).abs() < TEST_TOL);
+        assert!((xyz.y - 5.5).abs() < TEST_TOL);
+        assert!((xyz.z - 6.5).abs() < TEST_TOL);
+
+        let p: Pnt = XYZ::new(1.0, 2.0, 3.0).into();
+        assert!((p.x - 1.0).abs() < TEST_TOL);
+
+        let v: Vec3 = XYZ::new(1.0, 2.0, 3.0).into();
+        assert!((v.x - 1.0).abs() < TEST_TOL);
     }
 }

@@ -25,11 +25,11 @@ pub mod offset;
 
 // Re-exports for convenience
 pub use geom::{Pnt, Vec3, Dir};
-pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
+pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, CompSolid, Shape};
 pub use brep::topology;
 pub use curve::{Parabola, TrimmedCurve};
 pub use primitive::{make_box, make_sphere, make_cylinder, make_cone, make_torus};
-pub use boolean::{fuse, cut, common};
+pub use boolean::{fuse, cut, common, splitter};
 pub use sweep::make_revol;
 pub use loft::make_loft;
 pub use fillet::make_fillet;

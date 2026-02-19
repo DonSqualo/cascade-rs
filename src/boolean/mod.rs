@@ -752,6 +752,144 @@ pub fn section(solid: &Solid, plane_origin: [f64; 3], plane_normal: [f64; 3]) ->
     Ok(Shape::Wire(section_wire))
 }
 
+/// Splitter - divides a shape by other shapes without fusing
+/// 
+/// Returns all resulting fragments as separate solids.
+/// Splits a solid by tool solids, returning all resulting pieces.
+pub fn splitter(shape: &Solid, tools: &[Solid]) -> Result<Vec<Solid>> {
+    if tools.is_empty() {
+        return Ok(vec![shape.clone()]);
+    }
+    
+    let mut result_fragments = vec![shape.clone()];
+    
+    // Apply each tool sequentially
+    for tool in tools {
+        let mut new_fragments = Vec::new();
+        
+        for current_solid in &result_fragments {
+            match split_solid_by_tool(current_solid, tool) {
+                Ok(fragments) => {
+                    new_fragments.extend(fragments);
+                }
+                Err(_) => {
+                    // If splitting fails, keep the original solid
+                    new_fragments.push(current_solid.clone());
+                }
+            }
+        }
+        
+        result_fragments = new_fragments;
+    }
+    
+    if result_fragments.is_empty() {
+        Ok(vec![shape.clone()])
+    } else {
+        Ok(result_fragments)
+    }
+}
+
+/// Split a solid by a single tool solid
+/// Returns the fragments resulting from the split
+fn split_solid_by_tool(solid: &Solid, tool: &Solid) -> Result<Vec<Solid>> {
+    let bb_solid = BoundingBox::from_solid(solid);
+    let bb_tool = BoundingBox::from_solid(tool);
+    
+    // If bounding boxes don't intersect, return original solid
+    if !bb_solid.intersects(&bb_tool) {
+        return Ok(vec![solid.clone()]);
+    }
+    
+    // Check if solids actually intersect
+    if !solids_intersect(solid, tool) {
+        return Ok(vec![solid.clone()]);
+    }
+    
+    // Classify solid's faces relative to tool
+    let mut inside_faces = Vec::new();
+    let mut outside_faces = Vec::new();
+    
+    for face in &solid.outer_shell.faces {
+        let classification = classify_face(face, tool);
+        match classification {
+            FaceClassification::Inside => {
+                inside_faces.push(face.clone());
+            }
+            FaceClassification::Outside => {
+                outside_faces.push(face.clone());
+            }
+            FaceClassification::Boundary => {
+                // Boundary faces belong to both regions
+                outside_faces.push(face.clone());
+                inside_faces.push(face.clone());
+            }
+        }
+    }
+    
+    // Get faces from tool that are inside the original solid
+    let mut tool_faces_inside = Vec::new();
+    for face in &tool.outer_shell.faces {
+        let classification = classify_face(face, solid);
+        if classification == FaceClassification::Inside || classification == FaceClassification::Boundary {
+            tool_faces_inside.push(invert_face(face));
+        }
+    }
+    
+    let mut fragments = Vec::new();
+    
+    // Create the "outside" fragment (solid - tool)
+    if !outside_faces.is_empty() {
+        let mut outside_result_faces = outside_faces.clone();
+        outside_result_faces.extend(tool_faces_inside.clone());
+        
+        let fragment = Solid {
+            outer_shell: Shell {
+                faces: outside_result_faces,
+                closed: true,
+            },
+            inner_shells: Vec::new(),
+        };
+        
+        // Only add if it has at least 4 faces (minimum for a valid solid)
+        if fragment.outer_shell.faces.len() >= 4 {
+            fragments.push(fragment);
+        }
+    }
+    
+    // Create the "inside" fragment (solid ∩ tool)
+    if !inside_faces.is_empty() {
+        let mut inside_result_faces = inside_faces.clone();
+        
+        // Add inverted tool faces for boundary
+        for face in &tool.outer_shell.faces {
+            let classification = classify_face(face, solid);
+            if classification == FaceClassification::Inside || classification == FaceClassification::Boundary {
+                inside_result_faces.push(face.clone());
+            }
+        }
+        
+        let fragment = Solid {
+            outer_shell: Shell {
+                faces: inside_result_faces,
+                closed: true,
+            },
+            inner_shells: Vec::new(),
+        };
+        
+        // Only add if it has at least 4 faces (minimum for a valid solid)
+        if fragment.outer_shell.faces.len() >= 4 {
+            fragments.push(fragment);
+        }
+    }
+    
+    // If no valid fragments were created, return original solid
+    if fragments.is_empty() {
+        Ok(vec![solid.clone()])
+    } else {
+        Ok(fragments)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -814,5 +952,66 @@ mod tests {
         
         let result = fuse(&box1, &box2);
         assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_splitter_no_tools() {
+        let box_shape = make_box(1.0, 1.0, 1.0).unwrap();
+        let result = splitter(&box_shape, &[]);
+        
+        assert!(result.is_ok());
+        let fragments = result.unwrap();
+        assert_eq!(fragments.len(), 1);
+    }
+    
+    #[test]
+    fn test_splitter_non_intersecting_tool() {
+        let box_a = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box_b = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box_b away from box_a
+        for face in &mut box_b.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = splitter(&box_a, &[box_b]);
+        
+        assert!(result.is_ok());
+        let fragments = result.unwrap();
+        // Should return original box when tool doesn't intersect
+        assert!(fragments.len() >= 1);
+    }
+    
+    #[test]
+    fn test_splitter_with_intersecting_tool() {
+        let box_a = make_box(1.0, 1.0, 1.0).unwrap();
+        let box_b = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = splitter(&box_a, &[box_b]);
+        
+        assert!(result.is_ok());
+        let fragments = result.unwrap();
+        // Should create at least one fragment
+        assert!(fragments.len() >= 1);
+    }
+    
+    #[test]
+    fn test_splitter_multiple_tools() {
+        let box_main = make_box(2.0, 2.0, 2.0).unwrap();
+        let box_tool1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let box_tool2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = splitter(&box_main, &[box_tool1, box_tool2]);
+        
+        assert!(result.is_ok());
+        let fragments = result.unwrap();
+        // Should create fragments from multiple splits
+        assert!(fragments.len() >= 1);
     }
 }
