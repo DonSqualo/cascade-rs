@@ -1033,11 +1033,24 @@ pub fn split_edge(edge: &Edge, parameter: f64) -> Result<(Edge, Edge)> {
         ));
     }
 
-    // Import the point_at function from curve module
-    use crate::curve::point_at;
-
-    // Evaluate the curve at the split parameter
-    let split_point = point_at(&edge.curve_type, parameter)?;
+    // Compute the split point based on curve type
+    let split_point = match &edge.curve_type {
+        CurveType::Line => {
+            // For line segments, use linear interpolation
+            let start = &edge.start.point;
+            let end = &edge.end.point;
+            [
+                start[0] + parameter * (end[0] - start[0]),
+                start[1] + parameter * (end[1] - start[1]),
+                start[2] + parameter * (end[2] - start[2]),
+            ]
+        }
+        _ => {
+            // For other curves, use point_at function
+            use crate::curve::point_at;
+            point_at(&edge.curve_type, parameter)?
+        }
+    };
 
     // Create a new vertex at the split point
     let split_vertex = Vertex::new(split_point[0], split_point[1], split_point[2]);
@@ -1990,5 +2003,181 @@ mod tests {
         
         // Should have: original face + offset face + 4 outer side faces + 4 inner side faces = 10 faces
         assert_eq!(solid.outer_shell.faces.len(), 10, "Solid should have 10 faces (2 + 4 + 4)");
+    }
+
+    #[test]
+    fn test_split_edge_line_midpoint() {
+        // Create a simple line edge
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        // Split at midpoint
+        let result = split_edge(&edge, 0.5);
+        assert!(result.is_ok(), "Split at midpoint should succeed");
+
+        let (edge1, edge2) = result.unwrap();
+
+        // Check first edge
+        assert_eq!(edge1.start.point[0], 0.0);
+        assert_eq!(edge1.end.point[0], 5.0);
+        assert_eq!(edge1.end.point[1], 0.0);
+        assert_eq!(edge1.end.point[2], 0.0);
+
+        // Check second edge
+        assert_eq!(edge2.start.point[0], 5.0);
+        assert_eq!(edge2.end.point[0], 10.0);
+        assert_eq!(edge2.end.point[1], 0.0);
+        assert_eq!(edge2.end.point[2], 0.0);
+
+        // Both should be Line curves
+        match edge1.curve_type {
+            CurveType::Line => {},
+            _ => panic!("Edge1 should be a Line"),
+        }
+        match edge2.curve_type {
+            CurveType::Line => {},
+            _ => panic!("Edge2 should be a Line"),
+        }
+    }
+
+    #[test]
+    fn test_split_edge_line_quarter_point() {
+        // Create a line edge
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        // Split at 1/4 point
+        let result = split_edge(&edge, 0.25);
+        assert!(result.is_ok(), "Split at quarter point should succeed");
+
+        let (edge1, edge2) = result.unwrap();
+
+        // Check split point
+        assert!((edge1.end.point[0] - 2.5).abs() < 1e-6);
+        assert!((edge2.start.point[0] - 2.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_split_edge_invalid_parameter_below_zero() {
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        let result = split_edge(&edge, -0.5);
+        assert!(result.is_err(), "Split with negative parameter should fail");
+    }
+
+    #[test]
+    fn test_split_edge_invalid_parameter_above_one() {
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        let result = split_edge(&edge, 1.5);
+        assert!(result.is_err(), "Split with parameter > 1 should fail");
+    }
+
+    #[test]
+    fn test_split_edge_too_close_to_start() {
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        let result = split_edge(&edge, 1e-7);
+        assert!(result.is_err(), "Split too close to start should fail");
+    }
+
+    #[test]
+    fn test_split_edge_too_close_to_end() {
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        let result = split_edge(&edge, 1.0 - 1e-7);
+        assert!(result.is_err(), "Split too close to end should fail");
+    }
+
+    #[test]
+    fn test_split_edge_at_point_line() {
+        // Create a line edge
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        // Split at point (5, 0, 0)
+        let result = split_edge_at_point(&edge, [5.0, 0.0, 0.0]);
+        assert!(result.is_ok(), "Split at point on line should succeed");
+
+        let (edge1, edge2) = result.unwrap();
+
+        // Check endpoints
+        assert!((edge1.end.point[0] - 5.0).abs() < 1e-5);
+        assert!((edge2.start.point[0] - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_split_edge_at_point_not_on_edge() {
+        // Create a line edge
+        let edge = Edge {
+            start: Vertex::new(0.0, 0.0, 0.0),
+            end: Vertex::new(10.0, 0.0, 0.0),
+            curve_type: CurveType::Line,
+        };
+
+        // Try to split at a point not on the edge
+        let result = split_edge_at_point(&edge, [5.0, 5.0, 0.0]);
+        assert!(result.is_err(), "Split at point not on edge should fail");
+    }
+
+    #[test]
+    fn test_split_edge_arc_midpoint() {
+        // Create a circular arc edge (quarter circle in xy-plane)
+        let edge = Edge {
+            start: Vertex::new(1.0, 0.0, 0.0),
+            end: Vertex::new(0.0, 1.0, 0.0),
+            curve_type: CurveType::Arc {
+                center: [0.0, 0.0, 0.0],
+                radius: 1.0,
+            },
+        };
+
+        // Split at midpoint
+        let result = split_edge(&edge, 0.5);
+        assert!(result.is_ok(), "Split arc at midpoint should succeed");
+
+        let (edge1, edge2) = result.unwrap();
+
+        // Check that edges have Trimmed curves for arc
+        match &edge1.curve_type {
+            CurveType::Trimmed { basis_curve, u1, u2 } => {
+                assert!(*u1 < *u2, "u1 should be less than u2");
+                assert!(matches!(**basis_curve, CurveType::Arc { .. }));
+            }
+            _ => panic!("Edge1 should have Trimmed curve"),
+        }
+
+        match &edge2.curve_type {
+            CurveType::Trimmed { basis_curve, u1, u2 } => {
+                assert!(*u1 < *u2, "u1 should be less than u2");
+                assert!(matches!(**basis_curve, CurveType::Arc { .. }));
+            }
+            _ => panic!("Edge2 should have Trimmed curve"),
+        }
     }
 }
