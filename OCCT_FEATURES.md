@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 86 features  
-**Remaining:** 80 features  
+**Implemented:** 87 features  
+**Remaining:** 79 features  
 **Total:** 166 features  
-**Completion:** 51.8%
+**Completion:** 52.4%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-28 - Implemented Groove (arbitrary profile sweep along path, cuts from solid)*
+*Last updated: 2026-02-28 - Implemented Circular pattern (array of shapes around axis using Rodrigues' rotation formula)*
