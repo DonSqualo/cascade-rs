@@ -118,7 +118,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Hole (countersunk/counterbore) - `make_hole_countersunk(...)` and `make_hole_counterbore(...)`
 - [x] Slot - `make_slot(solid: &Solid, path: &Wire, width: f64, depth: f64) -> Result<Solid>`
 - [x] Rib - `make_rib(solid: &Solid, profile: &Wire, direction: [f64; 3], thickness: f64) -> Result<Solid>`
-- [ ] Groove
+- [x] Groove - `make_groove(solid: &Solid, path: &Wire, profile: &Wire) -> Result<Solid>`
 - [x] Linear pattern - `linear_pattern(shape: &Solid, direction: [f64;3], count: usize, spacing: f64) -> Result<Vec<Solid>>` and `linear_pattern_fused(...)` -> Result<Solid>`
 - [ ] Circular pattern
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 85 features  
-**Remaining:** 81 features  
+**Implemented:** 86 features  
+**Remaining:** 80 features  
 **Total:** 166 features  
-**Completion:** 51.2%
+**Completion:** 51.8%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-27 - Implemented Linear pattern (array of shapes along direction)*
+*Last updated: 2026-02-28 - Implemented Groove (arbitrary profile sweep along path, cuts from solid)*

@@ -1811,4 +1811,343 @@ mod tests {
         let fused_solid = fused.unwrap();
         assert!(!fused_solid.outer_shell.faces.is_empty(), "Result should have faces");
     }
+
+    #[test]
+    fn test_make_groove_basic() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        
+        // Create a simple rectangular profile for the groove
+        let profile = Wire {
+            edges: vec![
+                Edge {
+                    start: Vertex::new(0.0, 0.0, 0.0),
+                    end: Vertex::new(5.0, 0.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: Vertex::new(5.0, 0.0, 0.0),
+                    end: Vertex::new(5.0, 3.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: Vertex::new(5.0, 3.0, 0.0),
+                    end: Vertex::new(0.0, 3.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: Vertex::new(0.0, 3.0, 0.0),
+                    end: Vertex::new(0.0, 0.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+            ],
+            closed: true,
+        };
+
+        // Create a simple path for the groove
+        let path = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 10.0, 0.0),
+                end: Vertex::new(15.0, 10.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let grooved = make_groove(&solid, &path, &profile);
+        assert!(grooved.is_ok(), "Groove creation should succeed");
+        let grooved_solid = grooved.unwrap();
+        assert!(!grooved_solid.outer_shell.faces.is_empty(), "Result should have faces");
+    }
+
+    #[test]
+    fn test_make_groove_empty_path() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let profile = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 0.0, 0.0),
+                end: Vertex::new(5.0, 0.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+        
+        let empty_path = Wire {
+            edges: vec![],
+            closed: false,
+        };
+
+        let result = make_groove(&solid, &empty_path, &profile);
+        assert!(result.is_err(), "Empty path should fail");
+    }
+
+    #[test]
+    fn test_make_groove_empty_profile() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let path = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 10.0, 0.0),
+                end: Vertex::new(15.0, 10.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let empty_profile = Wire {
+            edges: vec![],
+            closed: false,
+        };
+
+        let result = make_groove(&solid, &path, &empty_profile);
+        assert!(result.is_err(), "Empty profile should fail");
+    }
+
+    #[test]
+    fn test_make_groove_zero_length_path() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        
+        let profile = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 0.0, 0.0),
+                end: Vertex::new(5.0, 0.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        // Create a path with zero length
+        let zero_path = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(10.0, 10.0, 0.0),
+                end: Vertex::new(10.0, 10.0, 0.0),  // Same start and end
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let result = make_groove(&solid, &zero_path, &profile);
+        assert!(result.is_err(), "Zero-length path should fail");
+    }
+
+    #[test]
+    fn test_make_groove_v_profile() {
+        // Test groove with a V-shaped profile (common for manufacturing)
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        
+        // Create a V-groove profile (triangular)
+        let v_profile = Wire {
+            edges: vec![
+                Edge {
+                    start: Vertex::new(0.0, 0.0, 0.0),
+                    end: Vertex::new(5.0, 0.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: Vertex::new(5.0, 0.0, 0.0),
+                    end: Vertex::new(2.5, 3.0, 0.0),  // Peak of V
+                    curve_type: CurveType::Line,
+                },
+                Edge {
+                    start: Vertex::new(2.5, 3.0, 0.0),
+                    end: Vertex::new(0.0, 0.0, 0.0),
+                    curve_type: CurveType::Line,
+                },
+            ],
+            closed: true,
+        };
+
+        let path = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 10.0, 0.0),
+                end: Vertex::new(15.0, 10.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let grooved = make_groove(&solid, &path, &v_profile);
+        assert!(grooved.is_ok(), "V-groove creation should succeed");
+    }
+
+    #[test]
+    fn test_make_groove_different_directions() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        
+        let profile = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 0.0, 0.0),
+                end: Vertex::new(3.0, 3.0, 0.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        // Test groove along X axis
+        let path_x = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(0.0, 10.0, 10.0),
+                end: Vertex::new(20.0, 10.0, 10.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let grooved_x = make_groove(&solid, &path_x, &profile);
+        assert!(grooved_x.is_ok(), "Groove along X axis should succeed");
+
+        // Test groove along Y axis
+        let path_y = Wire {
+            edges: vec![Edge {
+                start: Vertex::new(10.0, 0.0, 10.0),
+                end: Vertex::new(10.0, 20.0, 10.0),
+                curve_type: CurveType::Line,
+            }],
+            closed: false,
+        };
+
+        let grooved_y = make_groove(&solid, &path_y, &profile);
+        assert!(grooved_y.is_ok(), "Groove along Y axis should succeed");
+    }
+
+    #[test]
+    fn test_circular_pattern_basic() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let patterns = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            4,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(patterns.is_ok(), "Circular pattern should succeed");
+        let pattern_array = patterns.unwrap();
+        assert_eq!(pattern_array.len(), 4, "Should have 4 instances");
+
+        // Each instance should be a valid solid
+        for solid in pattern_array {
+            assert!(!solid.outer_shell.faces.is_empty(), "Each instance should have faces");
+        }
+    }
+
+    #[test]
+    fn test_circular_pattern_single_instance() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let patterns = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            1,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(patterns.is_ok(), "Single instance pattern should succeed");
+        let pattern_array = patterns.unwrap();
+        assert_eq!(pattern_array.len(), 1, "Should have 1 instance");
+    }
+
+    #[test]
+    fn test_circular_pattern_invalid_count() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let result = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            0,  // invalid count
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(result.is_err(), "Count of 0 should fail");
+    }
+
+    #[test]
+    fn test_circular_pattern_invalid_axis() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let result = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],  // zero direction
+            4,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(result.is_err(), "Zero direction vector should fail");
+    }
+
+    #[test]
+    fn test_circular_pattern_invalid_angle() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let result = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            4,
+            f64::NAN
+        );
+
+        assert!(result.is_err(), "NaN angle should fail");
+    }
+
+    #[test]
+    fn test_circular_pattern_fused() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let fused = circular_pattern_fused(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            4,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(fused.is_ok(), "Circular pattern fused should succeed");
+        let result = fused.unwrap();
+        assert!(!result.outer_shell.faces.is_empty(), "Result should have faces");
+    }
+
+    #[test]
+    fn test_circular_pattern_fused_single() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let fused = circular_pattern_fused(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            1,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(fused.is_ok(), "Single instance fused pattern should succeed");
+        let result = fused.unwrap();
+        assert!(!result.outer_shell.faces.is_empty(), "Result should have faces");
+    }
+
+    #[test]
+    fn test_circular_pattern_six_instances() {
+        let solid = make_box(3.0, 3.0, 3.0).expect("Failed to create box");
+        let patterns = circular_pattern(
+            &solid,
+            [10.0, 0.0, 0.0],  // axis offset from origin
+            [0.0, 1.0, 0.0],   // rotate around Y-axis
+            6,
+            std::f64::consts::PI * 2.0
+        );
+
+        assert!(patterns.is_ok(), "Six instance pattern should succeed");
+        let pattern_array = patterns.unwrap();
+        assert_eq!(pattern_array.len(), 6, "Should have 6 instances");
+    }
+
+    #[test]
+    fn test_circular_pattern_partial_angle() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let patterns = circular_pattern(
+            &solid,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            3,
+            std::f64::consts::PI / 2.0  // 90 degrees total for 3 instances
+        );
+
+        assert!(patterns.is_ok(), "Partial angle pattern should succeed");
+        let pattern_array = patterns.unwrap();
+        assert_eq!(pattern_array.len(), 3, "Should have 3 instances");
+    }
 }
