@@ -93,9 +93,9 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Draft prism (tapered extrusion)
 
 ### 3.4 Lofting & Skinning
-- [ ] ThruSections (loft)
-- [ ] Ruled surface
-- [ ] Skinning
+- [x] ThruSections (loft) - `make_loft(profiles: &[Wire], ruled: bool) -> Result<Solid>`
+- [x] Ruled surface - supported via `ruled=true` parameter
+- [x] Skinning - smooth BSpline surfaces via `ruled=false` parameter
 
 ### 3.5 Filleting & Chamfering
 - [x] Fillet (constant radius)

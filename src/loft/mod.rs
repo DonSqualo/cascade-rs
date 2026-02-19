@@ -61,9 +61,6 @@ pub fn make_loft(profiles: &[Wire], ruled: bool) -> Result<Solid> {
 
     // For each edge in the profiles, create a surface between corresponding edges
     for edge_idx in 0..edges_per_profile {
-        // Collect vertices along this edge across all profiles
-        let mut edge_curves = Vec::new();
-
         // For ruled surfaces, we connect edges directly
         // For smooth surfaces, we interpolate intermediate points
         if ruled {

@@ -7,8 +7,11 @@ pub mod boolean;
 pub mod brep;
 pub mod curve;
 pub mod surface;
+// pub mod sweep;  // Disabled: has compilation errors
+pub mod loft;
 pub mod modify;
 pub mod fillet;
+pub mod chamfer;
 pub mod mesh;
 pub mod io;
 pub mod query;
@@ -19,7 +22,9 @@ pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, Shape};
 pub use brep::topology;
 pub use primitive::{make_box, make_sphere, make_cylinder, make_cone, make_torus};
 pub use boolean::{fuse, cut, common};
+pub use loft::make_loft;
 pub use fillet::make_fillet;
+pub use chamfer::make_chamfer;
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
 
 /// Tolerance for geometric comparisons
