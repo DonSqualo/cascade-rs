@@ -114,10 +114,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Taper
 
 ### 3.8 Feature Operations
-- [ ] Hole (simple)
+- [x] Hole (simple) - `make_hole(solid: &Solid, center: [f64; 3], direction: [f64; 3], diameter: f64, depth: f64) -> Result<Solid>`
 - [ ] Hole (countersunk/counterbore)
-- [ ] Slot
-- [ ] Rib
+- [x] Slot - `make_slot(solid: &Solid, path: &Wire, width: f64, depth: f64) -> Result<Solid>`
+- [x] Rib - `make_rib(solid: &Solid, profile: &Wire, direction: [f64; 3], thickness: f64) -> Result<Solid>`
 - [ ] Groove
 - [ ] Linear pattern
 - [ ] Circular pattern
