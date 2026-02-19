@@ -119,7 +119,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Slot - `make_slot(solid: &Solid, path: &Wire, width: f64, depth: f64) -> Result<Solid>`
 - [x] Rib - `make_rib(solid: &Solid, profile: &Wire, direction: [f64; 3], thickness: f64) -> Result<Solid>`
 - [ ] Groove
-- [ ] Linear pattern
+- [x] Linear pattern - `linear_pattern(shape: &Solid, direction: [f64;3], count: usize, spacing: f64) -> Result<Vec<Solid>>` and `linear_pattern_fused(...)` -> Result<Solid>`
 - [ ] Circular pattern
 
 ### 3.9 Local Operations
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 84 features  
-**Remaining:** 82 features  
+**Implemented:** 85 features  
+**Remaining:** 81 features  
 **Total:** 166 features  
-**Completion:** 50.6%
+**Completion:** 51.2%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-25 - Implemented Fuzzy boolean (tolerance-based) operations*
+*Last updated: 2026-02-27 - Implemented Linear pattern (array of shapes along direction)*
