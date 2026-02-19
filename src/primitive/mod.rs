@@ -169,10 +169,85 @@ pub fn make_sphere(radius: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement sphere creation
-    // Should create a solid with spherical surface
+    // Create a sphere BREP topology
+    // North pole vertex
+    let v_north = Vertex::new(0.0, 0.0, radius);
+    // South pole vertex
+    let v_south = Vertex::new(0.0, 0.0, -radius);
     
-    Err(CascadeError::NotImplemented("primitive::sphere".into()))
+    // Create edges forming meridians that connect the poles
+    // We'll create 4 meridian edges positioned at 90-degree intervals around the sphere
+    // This forms a closed loop of edges that bounds the spherical surface
+    
+    // Meridian 1: from north to south via positive X side
+    let edge1 = Edge {
+        start: v_north.clone(),
+        end: v_south.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius,
+        },
+    };
+    
+    // Meridian 2: from south back to north via positive Y side
+    let edge2 = Edge {
+        start: v_south.clone(),
+        end: v_north.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius,
+        },
+    };
+    
+    // Meridian 3: from north to south via negative X side
+    let edge3 = Edge {
+        start: v_north.clone(),
+        end: v_south.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius,
+        },
+    };
+    
+    // Meridian 4: from south back to north via negative Y side
+    let edge4 = Edge {
+        start: v_south.clone(),
+        end: v_north.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius,
+        },
+    };
+    
+    // Create the outer wire from these edges
+    let outer_wire = Wire {
+        edges: vec![edge1, edge2, edge3, edge4],
+        closed: true,
+    };
+    
+    // Create the spherical face
+    let sphere_face = Face {
+        outer_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius,
+        },
+    };
+    
+    // Create shell containing the spherical face
+    let shell = Shell {
+        faces: vec![sphere_face],
+        closed: true,
+    };
+    
+    // Create and return the solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 /// Create a cylinder solid

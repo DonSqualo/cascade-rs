@@ -7,21 +7,7 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 03:22:25
-
-### Boolean Operations (0/4)
-- [ ] `boolean::fuse` — Union of solids
-- [ ] `boolean::cut` — Difference of solids
-- [ ] `boolean::common` — Intersection of solids
-- [ ] `boolean::section` — Section (solid/plane intersection)
-
-### Primitives (1/6)
-- [x] `primitive::box` — Box/cuboid creation
-- [ ] `primitive::sphere` — Sphere creation
-- [ ] `primitive::cylinder` — Cylinder creation
-- [ ] `primitive::cone` — Cone creation
-- [ ] `primitive::torus` — Torus creation
-- [ ] `primitive::wedge` — Wedge/prism creation
+Last validated: 2026-02-19 03:49:15
 
 ### BREP Core (7/8)
 - [x] `brep::vertex` — Vertex representation
@@ -33,7 +19,21 @@ Last validated: 2026-02-19 03:22:25
 - [x] `brep::compound` — Compound shapes
 - [ ] `brep::topology` — Topological queries (adjacent, connected, etc.)
 
-**Total: 8/18 features passing (44%)**
+### Primitives (2/6)
+- [x] `primitive::box` — Box/cuboid creation
+- [x] `primitive::sphere` — Sphere creation
+- [ ] `primitive::cylinder` — Cylinder creation
+- [ ] `primitive::cone` — Cone creation
+- [ ] `primitive::torus` — Torus creation
+- [ ] `primitive::wedge` — Wedge/prism creation
+
+### Boolean Operations (0/4)
+- [ ] `boolean::fuse` — Union of solids
+- [ ] `boolean::cut` — Difference of solids
+- [ ] `boolean::common` — Intersection of solids
+- [ ] `boolean::section` — Section (solid/plane intersection)
+
+**Total: 9/18 features passing (50%)**
 <!-- FEATURE_PARITY_END -->
 
 ## Architecture
