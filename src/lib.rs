@@ -39,7 +39,7 @@ pub use draft::{add_draft, taper};
 pub use feature::{make_hole, make_slot, make_rib, make_groove, circular_pattern, circular_pattern_fused};
 pub use heal::{sew_faces, fix_shape};
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
-pub use intersect::intersect_surfaces;
+pub use intersect::{intersect_surfaces, Curve2D, intersect_curves_2d};
 pub use offset::{thick_solid, make_shell};
 pub use local::{split_face, split_edge, split_edge_at_point, remove_face};
 
