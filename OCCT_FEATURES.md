@@ -106,7 +106,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 3.6 Offset Operations
 - [ ] Offset surface
 - [ ] Offset curve
-- [ ] Thick solid
+- [x] Thick solid
 - [x] Shell (hollow solid)
 
 ### 3.7 Draft & Taper
@@ -254,4 +254,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-19 - Implemented surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)*
+*Last updated: 2026-02-19 - Implemented thick_solid offset operation (grow/shrink solids), and exported offset module*
