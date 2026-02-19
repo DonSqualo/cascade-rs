@@ -38,7 +38,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] SphericalSurface
 - [x] ConicalSurface
 - [x] ToroidalSurface
-- [ ] BezierSurface
+- [x] BezierSurface
 - [x] BSplineSurface
 - [ ] RectangularTrimmedSurface
 - [ ] OffsetSurface

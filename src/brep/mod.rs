@@ -1174,3 +1174,130 @@ fn bezier_surface_normal(
     let normal = cross(&tangent_u, &tangent_v);
     normalize(&normal)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_bezier_surface_creation() {
+        // Create a simple 2x2 Bezier surface (linear in both directions)
+        let control_points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.5]],
+            vec![[0.0, 1.0, 0.5], [1.0, 1.0, 1.0]],
+        ];
+        
+        let surface = SurfaceType::bezier(control_points).unwrap();
+        
+        // Check degrees
+        assert_eq!(surface.degree_u(), Some(1));
+        assert_eq!(surface.degree_v(), Some(1));
+        
+        // Check control point access
+        assert_eq!(surface.control_point(0, 0), Some([0.0, 0.0, 0.0]));
+        assert_eq!(surface.control_point(1, 1), Some([1.0, 1.0, 1.0]));
+        assert_eq!(surface.control_point(2, 2), None); // Out of bounds
+    }
+    
+    #[test]
+    fn test_bezier_surface_corners() {
+        // A simple bilinear patch
+        // Grid is indexed as [u_index][v_index]
+        let control_points = vec![
+            vec![[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            vec![[2.0, 0.0, 0.0], [2.0, 2.0, 0.0]],
+        ];
+        
+        let surface = SurfaceType::bezier(control_points).unwrap();
+        
+        // At corners, the surface should pass through control points
+        // At (u=0, v=0) should be at P[0][0]
+        let p00 = surface.point_at(0.0, 0.0);
+        assert!((p00[0] - 0.0).abs() < 1e-9);
+        assert!((p00[1] - 0.0).abs() < 1e-9);
+        
+        // At (u=1, v=0) should be at P[1][0]
+        let p10 = surface.point_at(1.0, 0.0);
+        assert!((p10[0] - 2.0).abs() < 1e-9);
+        assert!((p10[1] - 0.0).abs() < 1e-9);
+        
+        // At (u=0, v=1) should be at P[0][1]
+        let p01 = surface.point_at(0.0, 1.0);
+        assert!((p01[0] - 0.0).abs() < 1e-9);
+        assert!((p01[1] - 2.0).abs() < 1e-9);
+        
+        // At (u=1, v=1) should be at P[1][1]
+        let p11 = surface.point_at(1.0, 1.0);
+        assert!((p11[0] - 2.0).abs() < 1e-9);
+        assert!((p11[1] - 2.0).abs() < 1e-9);
+    }
+    
+    #[test]
+    fn test_bezier_surface_midpoint() {
+        // Bilinear surface in XY plane
+        let control_points = vec![
+            vec![[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            vec![[2.0, 0.0, 0.0], [2.0, 2.0, 0.0]],
+        ];
+        
+        let surface = SurfaceType::bezier(control_points).unwrap();
+        
+        // At (u=0.5, v=0.5) for a bilinear surface, should be at (1, 1, 0)
+        let pmid = surface.point_at(0.5, 0.5);
+        assert!((pmid[0] - 1.0).abs() < 1e-9);
+        assert!((pmid[1] - 1.0).abs() < 1e-9);
+        assert!(pmid[2].abs() < 1e-9);
+    }
+    
+    #[test]
+    fn test_bezier_surface_normal() {
+        // Bilinear surface in XY plane should have normal in Z direction
+        let control_points = vec![
+            vec![[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            vec![[1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
+        ];
+        
+        let surface = SurfaceType::bezier(control_points).unwrap();
+        
+        // Normal should point in +Z direction for a surface lying in XY plane
+        let normal = surface.normal_at(0.5, 0.5);
+        let z_component = normal[2].abs();
+        assert!(z_component > 0.5, "Z component should be dominant, got {:?}", normal);
+        
+        // Check it's normalized
+        let len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        assert!((len - 1.0).abs() < 1e-10);
+    }
+    
+    #[test]
+    fn test_bezier_surface_cubic() {
+        // A cubic Bezier surface (4x4 control points)
+        let mut control_points = vec![];
+        for i in 0..4 {
+            let mut row = vec![];
+            for j in 0..4 {
+                row.push([i as f64, j as f64, ((i * j) as f64) * 0.1]);
+            }
+            control_points.push(row);
+        }
+        
+        let surface = SurfaceType::bezier(control_points).unwrap();
+        
+        // Check degrees
+        assert_eq!(surface.degree_u(), Some(3));
+        assert_eq!(surface.degree_v(), Some(3));
+        
+        // Evaluate at a point
+        let p = surface.point_at(0.5, 0.5);
+        // The result should be somewhere in the middle of the control point grid
+        assert!(p[0] >= 0.0 && p[0] <= 3.0);
+        assert!(p[1] >= 0.0 && p[1] <= 3.0);
+    }
+    
+    #[test]
+    fn test_bezier_surface_invalid_empty() {
+        let control_points: Vec<Vec<[f64; 3]>> = vec![];
+        let result = SurfaceType::bezier(control_points);
+        assert!(result.is_err());
+    }
+}
