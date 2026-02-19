@@ -18,7 +18,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] gp_Vec (3D vector)
 - [ ] gp_Pnt2d (2D point)
 - [ ] gp_Vec2d (2D vector)
-- [ ] gp_Dir (unit vector)
+- [x] gp_Dir (unit vector)
 - [ ] gp_XYZ (coordinates)
 
 ### 2.2 Geometry - Curves
@@ -30,7 +30,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] BezierCurve
 - [x] BSplineCurve
 - [ ] OffsetCurve
-- [ ] TrimmedCurve
+- [x] TrimmedCurve
 
 ### 2.3 Geometry - Surfaces
 - [x] Plane
