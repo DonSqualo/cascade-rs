@@ -589,6 +589,11 @@ impl SurfaceType {
             _ => None,
         }
     }
+
+    /// Alias for offset_distance()
+    pub fn offset(&self) -> Option<f64> {
+        self.offset_distance()
+    }
     
     /// Get a control point from a Bezier surface
     /// Returns None if this is not a Bezier surface or indices are out of bounds
