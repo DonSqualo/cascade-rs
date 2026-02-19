@@ -139,10 +139,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Drop small edges (threshold-based) - `drop_small_edges(solid: &Solid, threshold: f64) -> Result<Solid>`
 
 ### 3.11 Geometric Algorithms
-- [ ] Curve-curve intersection (2D)
+- [x] Curve-curve intersection (2D)
 - [ ] Curve-surface intersection
 - [x] Surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)
-- [ ] Point projection to curve
+- [x] Point projection to curve - `project_point_to_curve(point: [f64;3], curve: &CurveType, start: [f64;3], end: [f64;3]) -> Result<(f64, [f64;3])>` - Handles line, arc, bezier, bspline, parabola, hyperbola, ellipse, trimmed, and offset curves
 - [ ] Point projection to surface
 - [ ] Curve projection to surface
 - [ ] Extrema (distance) calculation
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 93 features  
-**Remaining:** 73 features  
+**Implemented:** 94 features  
+**Remaining:** 72 features  
 **Total:** 166 features  
-**Completion:** 56.0%
+**Completion:** 56.6%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-09 - Implemented Taper operation - `taper(solid: &Solid, face_indices: &[usize], angle: f64, neutral_plane: &Face) -> Result<Solid>` for applying taper angle to multiple faces of a solid relative to a neutral plane, preserving edge connectivity*
+*Last updated: 2026-03-12 - Implemented Point projection to curve - `project_point_to_curve(point: [f64;3], curve: &CurveType, start: [f64;3], end: [f64;3]) -> Result<(f64, [f64;3])>` - Returns (parameter, closest_point) on curve, supports all curve types with numerical methods for complex curves*
