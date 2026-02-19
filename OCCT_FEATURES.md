@@ -242,7 +242,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** ~38 features (draft angle added)
+**Implemented:** ~39 features
 **Total OCCT Features:** ~200+ core features
 
 **Priority Order:**
@@ -254,4 +254,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-19 - Implemented add_draft() for tapered/draft angles on faces with neutral plane support*
+*Last updated: 2025-02-21 - Added geom module with gp_Dir (unit vector/direction), Pnt, Vec3 types*
