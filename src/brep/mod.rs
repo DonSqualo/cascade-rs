@@ -54,6 +54,8 @@ pub enum SurfaceType {
     Plane { origin: [f64; 3], normal: [f64; 3] },
     Cylinder { origin: [f64; 3], axis: [f64; 3], radius: f64 },
     Sphere { center: [f64; 3], radius: f64 },
+    Cone { origin: [f64; 3], axis: [f64; 3], half_angle_rad: f64 },
+    Torus { center: [f64; 3], major_radius: f64, minor_radius: f64 },
     BSpline { /* TODO */ },
 }
 

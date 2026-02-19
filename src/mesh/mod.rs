@@ -56,6 +56,12 @@ fn triangulate_face(
         SurfaceType::Sphere { center, radius } => {
             triangulate_spherical_face(face, center, *radius, tolerance, vertices, normals, triangles)?;
         }
+        SurfaceType::Cone { origin, axis, half_angle_rad } => {
+            triangulate_conical_face(face, origin, axis, *half_angle_rad, tolerance, vertices, normals, triangles)?;
+        }
+        SurfaceType::Torus { center, major_radius, minor_radius } => {
+            triangulate_toroidal_face(face, center, *major_radius, *minor_radius, tolerance, vertices, normals, triangles)?;
+        }
         SurfaceType::BSpline { .. } => {
             return Err(CascadeError::NotImplemented("BSpline surface triangulation".into()));
         }
@@ -233,6 +239,169 @@ fn triangulate_spherical_face(
             let v1 = base_idx + lat * subdivisions + lon_next;
             let v2 = base_idx + (lat + 1) * subdivisions + lon;
             let v3 = base_idx + (lat + 1) * subdivisions + lon_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a conical face
+fn triangulate_conical_face(
+    face: &Face,
+    origin: &[f64; 3],
+    axis: &[f64; 3],
+    half_angle_rad: f64,
+    tolerance: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    let axis_normalized = normalize(axis);
+    
+    // Create perpendicular vectors
+    let perp1 = perpendicular_to(&axis_normalized);
+    let perp2 = cross(&axis_normalized, &perp1);
+    
+    // Get the height range from the wire
+    let outer_points = wire_to_points(&face.outer_wire);
+    let mut min_z = f64::INFINITY;
+    let mut max_z = f64::NEG_INFINITY;
+    
+    for point in &outer_points {
+        let z = dot(&[point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]], &axis_normalized);
+        min_z = min_z.min(z);
+        max_z = max_z.max(z);
+    }
+    
+    // Calculate radii at min and max height
+    let radius_at_min = min_z * half_angle_rad.tan();
+    let radius_at_max = max_z * half_angle_rad.tan();
+    let max_radius = radius_at_min.abs().max(radius_at_max.abs());
+    
+    // Estimate angle subdivisions needed based on largest radius
+    let circumference = 2.0 * std::f64::consts::PI * max_radius;
+    let angle_subdivisions = ((circumference / tolerance).ceil() as usize).max(8);
+    
+    let height_subdivisions = ((max_z - min_z) / tolerance).ceil() as usize + 1;
+    
+    let base_idx = vertices.len();
+    
+    // Create vertex grid
+    for h in 0..=height_subdivisions {
+        let z_param = min_z + (h as f64) / (height_subdivisions as f64) * (max_z - min_z);
+        let radius = z_param * half_angle_rad.tan();
+        let z_offset = scale_vec(&axis_normalized, z_param);
+        
+        for a in 0..angle_subdivisions {
+            let angle = (a as f64) / (angle_subdivisions as f64) * 2.0 * std::f64::consts::PI;
+            let cos_a = angle.cos();
+            let sin_a = angle.sin();
+            
+            let x = origin[0] + z_offset[0] + (cos_a * perp1[0] + sin_a * perp2[0]) * radius;
+            let y = origin[1] + z_offset[1] + (cos_a * perp1[1] + sin_a * perp2[1]) * radius;
+            let z = origin[2] + z_offset[2] + (cos_a * perp1[2] + sin_a * perp2[2]) * radius;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal for cone: perpendicular to cone surface
+            // The surface normal makes angle (π/2 - half_angle) with axis
+            let radial_dir = normalize(&[
+                cos_a * perp1[0] + sin_a * perp2[0],
+                cos_a * perp1[1] + sin_a * perp2[1],
+                cos_a * perp1[2] + sin_a * perp2[2],
+            ]);
+            let cos_normal_angle = half_angle_rad.cos();
+            let sin_normal_angle = half_angle_rad.sin();
+            let normal = normalize(&[
+                radial_dir[0] * cos_normal_angle - axis_normalized[0] * sin_normal_angle,
+                radial_dir[1] * cos_normal_angle - axis_normalized[1] * sin_normal_angle,
+                radial_dir[2] * cos_normal_angle - axis_normalized[2] * sin_normal_angle,
+            ]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for h in 0..height_subdivisions {
+        for a in 0..angle_subdivisions {
+            let a_next = (a + 1) % angle_subdivisions;
+            
+            let v0 = base_idx + h * angle_subdivisions + a;
+            let v1 = base_idx + h * angle_subdivisions + a_next;
+            let v2 = base_idx + (h + 1) * angle_subdivisions + a;
+            let v3 = base_idx + (h + 1) * angle_subdivisions + a_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a toroidal face
+fn triangulate_toroidal_face(
+    _face: &Face,
+    center: &[f64; 3],
+    major_radius: f64,
+    minor_radius: f64,
+    tolerance: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    // Estimate subdivisions based on tolerance
+    let major_circumference = 2.0 * std::f64::consts::PI * major_radius;
+    let minor_circumference = 2.0 * std::f64::consts::PI * minor_radius;
+    
+    let major_subdivisions = ((major_circumference / tolerance).ceil() as usize).max(4);
+    let minor_subdivisions = ((minor_circumference / tolerance).ceil() as usize).max(4);
+    
+    let base_idx = vertices.len();
+    
+    // Generate torus surface by sweeping a circle (minor) around another circle (major)
+    // u: angle around major circle (0 to 2π)
+    // v: angle around minor circle (0 to 2π)
+    for u in 0..=major_subdivisions {
+        let u_angle = (u as f64) / (major_subdivisions as f64) * 2.0 * std::f64::consts::PI;
+        let u_cos = u_angle.cos();
+        let u_sin = u_angle.sin();
+        
+        for v in 0..=minor_subdivisions {
+            let v_angle = (v as f64) / (minor_subdivisions as f64) * 2.0 * std::f64::consts::PI;
+            let v_cos = v_angle.cos();
+            let v_sin = v_angle.sin();
+            
+            // Position on torus: major circle offset + minor circle radius in that direction
+            let x = center[0] + (major_radius + minor_radius * v_cos) * u_cos;
+            let y = center[1] + (major_radius + minor_radius * v_cos) * u_sin;
+            let z = center[2] + minor_radius * v_sin;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal points outward from the torus surface
+            // It's the direction from the major circle to the point
+            let normal = normalize(&[
+                (major_radius + minor_radius * v_cos) * u_cos,
+                (major_radius + minor_radius * v_cos) * u_sin,
+                minor_radius * v_sin,
+            ]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for u in 0..major_subdivisions {
+        for v in 0..minor_subdivisions {
+            let v_next = v + 1;
+            
+            let v0 = base_idx + u * (minor_subdivisions + 1) + v;
+            let v1 = base_idx + u * (minor_subdivisions + 1) + v_next;
+            let v2 = base_idx + (u + 1) * (minor_subdivisions + 1) + v;
+            let v3 = base_idx + (u + 1) * (minor_subdivisions + 1) + v_next;
             
             triangles.push([v0, v1, v2]);
             triangles.push([v1, v3, v2]);

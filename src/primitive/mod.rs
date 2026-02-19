@@ -3,7 +3,7 @@
 //! These functions create basic solid shapes that can be used
 //! as building blocks for more complex geometry.
 
-use crate::brep::{Solid, Shape, Vertex, Edge, Wire, Face, Shell, CurveType, SurfaceType};
+use crate::brep::{Solid, Vertex, Edge, Wire, Face, Shell, CurveType, SurfaceType};
 use crate::{Result, CascadeError};
 
 /// Create a box (cuboid) solid
@@ -399,9 +399,140 @@ pub fn make_cone(radius1: f64, radius2: f64, height: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement cone creation
+    // Approximate circular edges with 8 arc segments
+    let n_segs = 8;
+    let angle_step = 2.0 * std::f64::consts::PI / (n_segs as f64);
     
-    Err(CascadeError::NotImplemented("primitive::cone".into()))
+    let mut faces = Vec::new();
+    
+    // Create vertices for bottom circle (z=0)
+    let mut bottom_vertices = Vec::new();
+    for i in 0..n_segs {
+        let angle = angle_step * (i as f64);
+        let x = radius1 * angle.cos();
+        let y = radius1 * angle.sin();
+        bottom_vertices.push(Vertex::new(x, y, 0.0));
+    }
+    
+    // Create vertices for top circle (z=height)
+    let mut top_vertices = Vec::new();
+    for i in 0..n_segs {
+        let angle = angle_step * (i as f64);
+        let x = radius2 * angle.cos();
+        let y = radius2 * angle.sin();
+        top_vertices.push(Vertex::new(x, y, height));
+    }
+    
+    // Create arc edges for bottom circle
+    let mut bottom_edges = Vec::new();
+    for i in 0..n_segs {
+        let start = bottom_vertices[i].clone();
+        let end = bottom_vertices[(i + 1) % n_segs].clone();
+        let edge = Edge {
+            start,
+            end,
+            curve_type: CurveType::Arc {
+                center: [0.0, 0.0, 0.0],
+                radius: radius1,
+            },
+        };
+        bottom_edges.push(edge);
+    }
+    
+    // Create arc edges for top circle (only if radius2 > 0)
+    let mut top_edges = Vec::new();
+    if radius2 > 0.0 {
+        for i in 0..n_segs {
+            let start = top_vertices[i].clone();
+            let end = top_vertices[(i + 1) % n_segs].clone();
+            let edge = Edge {
+                start,
+                end,
+                curve_type: CurveType::Arc {
+                    center: [0.0, 0.0, height],
+                    radius: radius2,
+                },
+            };
+            top_edges.push(edge);
+        }
+    }
+    
+    // Create wires for the circular boundaries
+    let bottom_wire = Wire {
+        edges: bottom_edges.clone(),
+        closed: true,
+    };
+    
+    // Create bottom planar face (z=0, normal pointing down) - only if radius1 > 0
+    if radius1 > 0.0 {
+        let bottom_face = Face {
+            outer_wire: bottom_wire.clone(),
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: [0.0, 0.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+            },
+        };
+        faces.push(bottom_face);
+    }
+    
+    // Create top planar face (z=height, normal pointing up) - only if radius2 > 0
+    if radius2 > 0.0 {
+        let top_wire = Wire {
+            edges: top_edges.clone(),
+            closed: true,
+        };
+        let top_face = Face {
+            outer_wire: top_wire.clone(),
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: [0.0, 0.0, height],
+                normal: [0.0, 0.0, 1.0],
+            },
+        };
+        faces.push(top_face);
+    }
+    
+    // Create conical side face
+    // The outer wire is the bottom circle, inner wire is the top circle
+    // For a pointed cone (radius2 == 0), inner_wires is empty
+    let inner_wires = if radius2 > 0.0 && !top_edges.is_empty() {
+        vec![Wire {
+            edges: top_edges,
+            closed: true,
+        }]
+    } else {
+        vec![]
+    };
+    
+    let side_face = Face {
+        outer_wire: bottom_wire,
+        inner_wires,
+        surface_type: SurfaceType::Cone {
+            origin: [0.0, 0.0, 0.0],
+            axis: [0.0, 0.0, 1.0],
+            half_angle_rad: if height > 0.0 && radius1 > 0.0 {
+                (radius1 / height).atan()
+            } else {
+                0.0
+            },
+        },
+    };
+    faces.push(side_face);
+    
+    // Create closed shell
+    let shell = Shell {
+        faces,
+        closed: true,
+    };
+    
+    // Create solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 /// Create a torus solid
@@ -424,18 +555,97 @@ pub fn make_torus(major_radius: f64, minor_radius: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement torus creation
+    // Create a torus BREP topology with a single toroidal surface
+    // The torus is bounded by 4 edges that form a closed curve around the major circle
+    // at the outer equator of the torus (distance major_radius + minor_radius from center)
     
-    Err(CascadeError::NotImplemented("primitive::torus".into()))
+    // Create 4 points around the outer equator of the torus
+    // These are positioned at 90-degree intervals
+    let v0 = Vertex::new(major_radius + minor_radius, 0.0, 0.0);
+    let v1 = Vertex::new(0.0, major_radius + minor_radius, 0.0);
+    let v2 = Vertex::new(-(major_radius + minor_radius), 0.0, 0.0);
+    let v3 = Vertex::new(0.0, -(major_radius + minor_radius), 0.0);
+    
+    // Create 4 arc edges connecting these points around the major circle
+    // Each edge is an arc on a circle of radius (major_radius + minor_radius) in the XY plane
+    let edge0 = Edge {
+        start: v0.clone(),
+        end: v1.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: major_radius + minor_radius,
+        },
+    };
+    
+    let edge1 = Edge {
+        start: v1.clone(),
+        end: v2.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: major_radius + minor_radius,
+        },
+    };
+    
+    let edge2 = Edge {
+        start: v2.clone(),
+        end: v3.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: major_radius + minor_radius,
+        },
+    };
+    
+    let edge3 = Edge {
+        start: v3.clone(),
+        end: v0.clone(),
+        curve_type: CurveType::Arc {
+            center: [0.0, 0.0, 0.0],
+            radius: major_radius + minor_radius,
+        },
+    };
+    
+    // Create the outer wire from these edges
+    let outer_wire = Wire {
+        edges: vec![edge0, edge1, edge2, edge3],
+        closed: true,
+    };
+    
+    // Create the toroidal face
+    let torus_face = Face {
+        outer_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Torus {
+            center: [0.0, 0.0, 0.0],
+            major_radius,
+            minor_radius,
+        },
+    };
+    
+    // Create shell containing the toroidal face
+    let shell = Shell {
+        faces: vec![torus_face],
+        closed: true,
+    };
+    
+    // Create and return the solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 /// Create a wedge (prism) solid
 ///
+/// A wedge is a box-like shape with the top edge offset in the X direction.
+/// The top face is smaller than the bottom, creating a sloped side face.
+///
 /// # Arguments
-/// * `dx` - Size in X
-/// * `dy` - Size in Y
-/// * `dz` - Size in Z
-/// * `ltx` - Top X size (for tapering)
+/// * `dx` - Size in X direction at the base
+/// * `dy` - Size in Y direction
+/// * `dz` - Size in Z direction
+/// * `ltx` - Length of the top edge in X direction (0 = pyramid, dx = box)
 ///
 /// # Returns
 /// A Solid representing a wedge
@@ -446,9 +656,145 @@ pub fn make_wedge(dx: f64, dy: f64, dz: f64, ltx: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement wedge creation
+    if ltx < 0.0 || ltx > dx {
+        return Err(CascadeError::InvalidGeometry(
+            "ltx must be between 0 and dx".into()
+        ));
+    }
     
-    Err(CascadeError::NotImplemented("primitive::wedge".into()))
+    // Create 8 vertices
+    // Bottom face (z=0) - full size rectangle
+    let v0 = Vertex::new(0.0, 0.0, 0.0);
+    let v1 = Vertex::new(dx, 0.0, 0.0);
+    let v2 = Vertex::new(dx, dy, 0.0);
+    let v3 = Vertex::new(0.0, dy, 0.0);
+    
+    // Top face (z=dz) - offset in X direction by (dx-ltx)/2
+    let offset_x = (dx - ltx) / 2.0;
+    let v4 = Vertex::new(offset_x, 0.0, dz);
+    let v5 = Vertex::new(offset_x + ltx, 0.0, dz);
+    let v6 = Vertex::new(offset_x + ltx, dy, dz);
+    let v7 = Vertex::new(offset_x, dy, dz);
+    
+    // Create 12 edges
+    // Bottom face edges (z=0)
+    let e0 = Edge { start: v0.clone(), end: v1.clone(), curve_type: CurveType::Line };
+    let e1 = Edge { start: v1.clone(), end: v2.clone(), curve_type: CurveType::Line };
+    let e2 = Edge { start: v2.clone(), end: v3.clone(), curve_type: CurveType::Line };
+    let e3 = Edge { start: v3.clone(), end: v0.clone(), curve_type: CurveType::Line };
+    
+    // Top face edges (z=dz)
+    let e4 = Edge { start: v4.clone(), end: v5.clone(), curve_type: CurveType::Line };
+    let e5 = Edge { start: v5.clone(), end: v6.clone(), curve_type: CurveType::Line };
+    let e6 = Edge { start: v6.clone(), end: v7.clone(), curve_type: CurveType::Line };
+    let e7 = Edge { start: v7.clone(), end: v4.clone(), curve_type: CurveType::Line };
+    
+    // Vertical edges connecting bottom to top
+    let e8 = Edge { start: v0.clone(), end: v4.clone(), curve_type: CurveType::Line };
+    let e9 = Edge { start: v1.clone(), end: v5.clone(), curve_type: CurveType::Line };
+    let e10 = Edge { start: v2.clone(), end: v6.clone(), curve_type: CurveType::Line };
+    let e11 = Edge { start: v3.clone(), end: v7.clone(), curve_type: CurveType::Line };
+    
+    // Create 6 faces
+    
+    // Bottom face (z=0) - normal pointing down
+    let bottom_wire = Wire {
+        edges: vec![e0.clone(), e1.clone(), e2.clone(), e3.clone()],
+        closed: true,
+    };
+    let bottom_face = Face {
+        outer_wire: bottom_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+        },
+    };
+    
+    // Top face (z=dz) - normal pointing up
+    let top_wire = Wire {
+        edges: vec![e4.clone(), e5.clone(), e6.clone(), e7.clone()],
+        closed: true,
+    };
+    let top_face = Face {
+        outer_wire: top_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [offset_x, 0.0, dz],
+            normal: [0.0, 0.0, 1.0],
+        },
+    };
+    
+    // Front face (y=0) - normal pointing back (negative Y)
+    let front_wire = Wire {
+        edges: vec![e0.clone(), e9.clone(), e4.clone(), e8.clone()],
+        closed: true,
+    };
+    let front_face = Face {
+        outer_wire: front_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, -1.0, 0.0],
+        },
+    };
+    
+    // Back face (y=dy) - normal pointing forward (positive Y)
+    let back_wire = Wire {
+        edges: vec![e3.clone(), e7.clone(), e6.clone(), e2.clone()],
+        closed: true,
+    };
+    let back_face = Face {
+        outer_wire: back_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, dy, 0.0],
+            normal: [0.0, 1.0, 0.0],
+        },
+    };
+    
+    // Left face (x=offset_x) - normal pointing left (negative X)
+    let left_wire = Wire {
+        edges: vec![e8.clone(), e7.clone(), e3.clone(), e11.clone()],
+        closed: true,
+    };
+    let left_face = Face {
+        outer_wire: left_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [offset_x, 0.0, 0.0],
+            normal: [-1.0, 0.0, 0.0],
+        },
+    };
+    
+    // Right face (sloped) - connecting v1, v2, v6, v5
+    // This is a planar quadrilateral face with normal computed from the plane
+    let right_wire = Wire {
+        edges: vec![e1.clone(), e10.clone(), e5.clone(), e9.clone()],
+        closed: true,
+    };
+    let right_face = Face {
+        outer_wire: right_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [dx, 0.0, 0.0],
+            normal: [1.0, 0.0, 0.0],
+        },
+    };
+    
+    // Create shell with all faces
+    let shell = Shell {
+        faces: vec![bottom_face, top_face, front_face, back_face, left_face, right_face],
+        closed: true,
+    };
+    
+    // Create solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 #[cfg(test)]
