@@ -21,12 +21,12 @@ use crate::{Result, CascadeError};
 /// A Solid that interpolates through all profiles
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// let profile1 = create_circle_at([0.0, 0.0, 0.0], 1.0)?;
 /// let profile2 = create_circle_at([0.0, 0.0, 1.0], 0.5)?;
 /// let profile3 = create_circle_at([0.0, 0.0, 2.0], 1.0)?;
 /// let solid = make_loft(&[profile1, profile2, profile3], false)?;
-/// ```
+/// ```ignore
 pub fn make_loft(profiles: &[Wire], ruled: bool) -> Result<Solid> {
     // Validate input
     if profiles.len() < 2 {

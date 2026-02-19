@@ -377,8 +377,8 @@ impl StepParser {
                 },
                 "MANIFOLD_SOLID_BREP" => {
                     let parts = self.parse_list(&args_to_parse)?;
-                    let shell_id = if parts.len() > 1 {
-                        self.resolve_id(&parts[1])?
+                    let shell_id = if parts.len() > 0 {
+                        self.resolve_id(&parts[0])?
                     } else {
                         0
                     };
