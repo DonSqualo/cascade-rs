@@ -7,11 +7,11 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: never
+Last validated: 2026-02-19 03:22:13
 
-### Primitives (0/6)
-- [ ] `primitive::box` — Box/cuboid creation
-- [ ] `primitive::sphere` — Sphere creation  
+### Primitives (1/6)
+- [x] `primitive::box` — Box/cuboid creation
+- [ ] `primitive::sphere` — Sphere creation
 - [ ] `primitive::cylinder` — Cylinder creation
 - [ ] `primitive::cone` — Cone creation
 - [ ] `primitive::torus` — Torus creation
@@ -23,55 +23,17 @@ Last validated: never
 - [ ] `boolean::common` — Intersection of solids
 - [ ] `boolean::section` — Section (solid/plane intersection)
 
-### BREP Core (0/8)
-- [ ] `brep::vertex` — Vertex representation
-- [ ] `brep::edge` — Edge representation (line, arc, spline)
-- [ ] `brep::wire` — Wire (connected edges)
-- [ ] `brep::face` — Face representation
-- [ ] `brep::shell` — Shell (connected faces)
-- [ ] `brep::solid` — Solid representation
-- [ ] `brep::compound` — Compound shapes
+### BREP Core (7/8)
+- [x] `brep::vertex` — Vertex representation
+- [x] `brep::edge` — Edge representation (line, arc, spline)
+- [x] `brep::wire` — Wire (connected edges)
+- [x] `brep::face` — Face representation
+- [x] `brep::shell` — Shell (connected faces)
+- [x] `brep::solid` — Solid representation
+- [x] `brep::compound` — Compound shapes
 - [ ] `brep::topology` — Topological queries (adjacent, connected, etc.)
 
-### Curves (0/5)
-- [ ] `curve::line` — Line segment
-- [ ] `curve::circle` — Circle/arc
-- [ ] `curve::ellipse` — Ellipse
-- [ ] `curve::bspline` — B-spline curve
-- [ ] `curve::bezier` — Bezier curve
-
-### Surfaces (0/5)
-- [ ] `surface::plane` — Planar surface
-- [ ] `surface::cylinder` — Cylindrical surface
-- [ ] `surface::sphere` — Spherical surface
-- [ ] `surface::bspline` — B-spline surface
-- [ ] `surface::bezier` — Bezier surface
-
-### Modifications (0/4)
-- [ ] `modify::fillet` — Edge filleting
-- [ ] `modify::chamfer` — Edge chamfering
-- [ ] `modify::offset` — Solid offset/shell
-- [ ] `modify::transform` — Affine transforms
-
-### Meshing (0/3)
-- [ ] `mesh::triangulate` — Surface triangulation
-- [ ] `mesh::quality` — Mesh quality control
-- [ ] `mesh::export_stl` — STL export
-
-### File I/O (0/4)
-- [ ] `io::step_read` — STEP file import
-- [ ] `io::step_write` — STEP file export
-- [ ] `io::brep_read` — Native BREP import
-- [ ] `io::brep_write` — Native BREP export
-
-### Geometric Queries (0/5)
-- [ ] `query::distance` — Min distance between shapes
-- [ ] `query::intersection` — Shape intersection test
-- [ ] `query::inside` — Point-in-solid test
-- [ ] `query::bounds` — Bounding box
-- [ ] `query::properties` — Volume, area, center of mass
-
-**Total: 0/44 features passing (0%)**
+**Total: 8/18 features passing (44%)**
 <!-- FEATURE_PARITY_END -->
 
 ## Architecture

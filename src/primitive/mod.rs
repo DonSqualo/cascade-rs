@@ -3,7 +3,7 @@
 //! These functions create basic solid shapes that can be used
 //! as building blocks for more complex geometry.
 
-use crate::brep::{Solid, Shape};
+use crate::brep::{Solid, Shape, Vertex, Edge, Wire, Face, Shell, CurveType, SurfaceType};
 use crate::{Result, CascadeError};
 
 /// Create a box (cuboid) solid
@@ -22,15 +22,137 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
         ));
     }
     
-    // TODO: Implement box creation
-    // Should create:
-    // - 8 vertices at corners
-    // - 12 edges connecting vertices
-    // - 6 faces (planes)
-    // - 1 shell (closed)
-    // - 1 solid
+    // Create 8 vertices at the corners of the box
+    // Bottom face (z=0)
+    let v0 = Vertex::new(0.0, 0.0, 0.0);
+    let v1 = Vertex::new(dx, 0.0, 0.0);
+    let v2 = Vertex::new(dx, dy, 0.0);
+    let v3 = Vertex::new(0.0, dy, 0.0);
     
-    Err(CascadeError::NotImplemented("primitive::box".into()))
+    // Top face (z=dz)
+    let v4 = Vertex::new(0.0, 0.0, dz);
+    let v5 = Vertex::new(dx, 0.0, dz);
+    let v6 = Vertex::new(dx, dy, dz);
+    let v7 = Vertex::new(0.0, dy, dz);
+    
+    // Create 12 edges
+    // Bottom face edges (z=0)
+    let e0 = Edge { start: v0.clone(), end: v1.clone(), curve_type: CurveType::Line };
+    let e1 = Edge { start: v1.clone(), end: v2.clone(), curve_type: CurveType::Line };
+    let e2 = Edge { start: v2.clone(), end: v3.clone(), curve_type: CurveType::Line };
+    let e3 = Edge { start: v3.clone(), end: v0.clone(), curve_type: CurveType::Line };
+    
+    // Top face edges (z=dz)
+    let e4 = Edge { start: v4.clone(), end: v5.clone(), curve_type: CurveType::Line };
+    let e5 = Edge { start: v5.clone(), end: v6.clone(), curve_type: CurveType::Line };
+    let e6 = Edge { start: v6.clone(), end: v7.clone(), curve_type: CurveType::Line };
+    let e7 = Edge { start: v7.clone(), end: v4.clone(), curve_type: CurveType::Line };
+    
+    // Vertical edges
+    let e8 = Edge { start: v0.clone(), end: v4.clone(), curve_type: CurveType::Line };
+    let e9 = Edge { start: v1.clone(), end: v5.clone(), curve_type: CurveType::Line };
+    let e10 = Edge { start: v2.clone(), end: v6.clone(), curve_type: CurveType::Line };
+    let e11 = Edge { start: v3.clone(), end: v7.clone(), curve_type: CurveType::Line };
+    
+    // Create 6 faces
+    
+    // Bottom face (z=0) - normal pointing down
+    let bottom_wire = Wire {
+        edges: vec![e0.clone(), e1.clone(), e2.clone(), e3.clone()],
+        closed: true,
+    };
+    let bottom_face = Face {
+        outer_wire: bottom_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+        },
+    };
+    
+    // Top face (z=dz) - normal pointing up
+    let top_wire = Wire {
+        edges: vec![e4.clone(), e5.clone(), e6.clone(), e7.clone()],
+        closed: true,
+    };
+    let top_face = Face {
+        outer_wire: top_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, dz],
+            normal: [0.0, 0.0, 1.0],
+        },
+    };
+    
+    // Front face (y=0) - normal pointing back (negative Y)
+    let front_wire = Wire {
+        edges: vec![e0.clone(), e9.clone(), e4.clone(), e8.clone()],
+        closed: true,
+    };
+    let front_face = Face {
+        outer_wire: front_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, -1.0, 0.0],
+        },
+    };
+    
+    // Back face (y=dy) - normal pointing forward (positive Y)
+    let back_wire = Wire {
+        edges: vec![e3.clone(), e7.clone(), e6.clone(), e2.clone()],
+        closed: true,
+    };
+    let back_face = Face {
+        outer_wire: back_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, dy, 0.0],
+            normal: [0.0, 1.0, 0.0],
+        },
+    };
+    
+    // Left face (x=0) - normal pointing left (negative X)
+    let left_wire = Wire {
+        edges: vec![e8.clone(), e7.clone(), e3.clone(), e11.clone()],
+        closed: true,
+    };
+    let left_face = Face {
+        outer_wire: left_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [-1.0, 0.0, 0.0],
+        },
+    };
+    
+    // Right face (x=dx) - normal pointing right (positive X)
+    let right_wire = Wire {
+        edges: vec![e1.clone(), e10.clone(), e5.clone(), e9.clone()],
+        closed: true,
+    };
+    let right_face = Face {
+        outer_wire: right_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Plane {
+            origin: [dx, 0.0, 0.0],
+            normal: [1.0, 0.0, 0.0],
+        },
+    };
+    
+    // Create shell with all 6 faces
+    let shell = Shell {
+        faces: vec![bottom_face, top_face, front_face, back_face, left_face, right_face],
+        closed: true,
+    };
+    
+    // Create solid
+    let solid = Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    };
+    
+    Ok(solid)
 }
 
 /// Create a sphere solid
