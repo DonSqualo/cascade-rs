@@ -1433,7 +1433,7 @@ mod tests {
         
         // Create an offset surface with positive offset
         let offset_surface = SurfaceType::OffsetSurface {
-            basis_surface: Box::new(basis),
+            basis_surface: Box::new(basis.clone()),
             offset_distance: 5.0,
         };
         
