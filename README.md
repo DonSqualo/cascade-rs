@@ -7,7 +7,13 @@ Pure Rust CAD kernel targeting 80/20 feature parity with OpenCASCADE.
 ## Feature Parity Status
 
 <!-- FEATURE_PARITY_START -->
-Last validated: 2026-02-19 04:04:57
+Last validated: 2026-02-19 04:05:35
+
+### Boolean Operations (0/4)
+- [ ] `boolean::fuse` — Union of solids
+- [ ] `boolean::cut` — Difference of solids
+- [ ] `boolean::common` — Intersection of solids
+- [ ] `boolean::section` — Section (solid/plane intersection)
 
 ### BREP Core (7/8)
 - [x] `brep::vertex` — Vertex representation
@@ -26,12 +32,6 @@ Last validated: 2026-02-19 04:04:57
 - [x] `primitive::cone` — Cone creation
 - [x] `primitive::torus` — Torus creation
 - [x] `primitive::wedge` — Wedge/prism creation
-
-### Boolean Operations (0/4)
-- [ ] `boolean::fuse` — Union of solids
-- [ ] `boolean::cut` — Difference of solids
-- [ ] `boolean::common` — Intersection of solids
-- [ ] `boolean::section` — Section (solid/plane intersection)
 
 **Total: 13/18 features passing (72%)**
 <!-- FEATURE_PARITY_END -->
