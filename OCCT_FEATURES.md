@@ -86,9 +86,9 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Fuzzy boolean (tolerance-based)
 
 ### 3.3 Sweeps & Extrusions
-- [ ] Prism (linear sweep)
-- [ ] Revol (rotational sweep)
-- [ ] Pipe (path sweep)
+- [x] Prism (linear sweep)
+- [x] Revol (rotational sweep)
+- [x] Pipe (path sweep)
 - [ ] Evolved (complex sweep)
 - [ ] Draft prism (tapered extrusion)
 

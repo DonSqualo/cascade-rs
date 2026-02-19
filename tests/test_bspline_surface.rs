@@ -1,4 +1,4 @@
-use cascade_rs::brep::{SurfaceType, Vertex, Edge, Wire, Face, Shell, Solid};
+use cascade::brep::{SurfaceType, Vertex, Edge, Wire, Face, Shell, Solid};
 
 #[test]
 fn test_bspline_surface_creation() {

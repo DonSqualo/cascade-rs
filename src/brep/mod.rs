@@ -119,14 +119,12 @@ impl SurfaceType {
                 
                 [x, y, z]
             }
-            SurfaceType::Torus { center, major_radius, minor_radius } => {
+            SurfaceType::Torus { center, major_radius: _, minor_radius: _ } => {
                 let _u_angle = u * 2.0 * std::f64::consts::PI;
                 let _v_angle = v * 2.0 * std::f64::consts::PI;
                 
                 // Return center as placeholder - full implementation TODO
                 *center
-                
-                [x, y, z]
             }
             SurfaceType::BSpline {
                 u_degree,
