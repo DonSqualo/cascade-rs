@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-07 - Implemented Drop small edges (threshold-based) operation - `drop_small_edges(solid: &Solid, threshold: f64)` for removing edges shorter than a threshold while merging vertices and updating topology*
+*Last updated: 2026-03-09 - Implemented Taper operation - `taper(solid: &Solid, face_indices: &[usize], angle: f64, neutral_plane: &Face) -> Result<Solid>` for applying taper angle to multiple faces of a solid relative to a neutral plane, preserving edge connectivity*
