@@ -126,8 +126,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Split face - `split_face(face: &Face, splitting_curve: &Edge) -> Result<Vec<Face>>`
 - [ ] Split edge
 - [x] Remove face - `remove_face(solid: &Solid, face_index: usize) -> Result<Solid>`
-- [ ] Replace face
-- [ ] Thicken face
+- [x] Replace face - `replace_face(solid: &Solid, face_index: usize, new_face: &Face) -> Result<Solid>`
+- [x] Thicken face - `thicken_face(face: &Face, thickness: f64) -> Result<Solid>`
 
 ### 3.10 Healing & Repair
 - [x] Sewing (connect faces) - sew_faces()
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 88 features  
-**Remaining:** 78 features  
+**Implemented:** 90 features  
+**Remaining:** 76 features  
 **Total:** 166 features  
-**Completion:** 53.0%
+**Completion:** 54.2%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-28 - Implemented Circular pattern (array of shapes around axis using Rodrigues' rotation formula)*
+*Last updated: 2026-03-06 - Implemented Thicken face, Replace face, and Remove face operations*
