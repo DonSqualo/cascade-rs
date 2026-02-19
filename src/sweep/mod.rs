@@ -698,3 +698,114 @@ fn rotate_point_around_axis(
         axis_origin[2] + term1[2] + term2[2] + term3[2],
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_revol_rectangle_cylinder() {
+        // Create a simple rectangle profile in XZ plane
+        let v1 = Vertex::new(1.0, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 3.0);
+        let v3 = Vertex::new(2.0, 0.0, 3.0);
+        let v4 = Vertex::new(2.0, 0.0, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        let face = Face {
+            outer_wire: wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: [0.0, 0.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+            },
+        };
+
+        // Revolve 360 degrees around Z axis to create cylinder-like solid
+        let result = make_revol(&face, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 2.0 * std::f64::consts::PI);
+
+        assert!(result.is_ok(), "Failed to create 360° revolution solid");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Solid should have faces");
+    }
+
+    #[test]
+    fn test_revol_90_degrees() {
+        // Create a rectangle profile for partial revolution
+        let v1 = Vertex::new(1.0, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 1.0);
+        let v3 = Vertex::new(2.0, 0.0, 1.0);
+        let v4 = Vertex::new(2.0, 0.0, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        let face = Face {
+            outer_wire: wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: [0.0, 0.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+            },
+        };
+
+        // Revolve 90 degrees
+        let result = make_revol(&face, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], std::f64::consts::PI / 2.0);
+        
+        assert!(result.is_ok(), "Failed to create 90° revolution solid");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Revolved solid should have faces");
+    }
+}

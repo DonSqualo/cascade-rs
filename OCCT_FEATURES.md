@@ -100,7 +100,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 3.5 Filleting & Chamfering
 - [x] Fillet (constant radius)
 - [ ] Fillet (variable radius)
-- [ ] Chamfer
+- [x] Chamfer (planar bevel)
 - [ ] Blend (rolling ball)
 
 ### 3.6 Offset Operations
@@ -242,7 +242,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** ~30 features
+**Implemented:** ~31 features (chamfer added)
 **Total OCCT Features:** ~200+ core features
 
 **Priority Order:**

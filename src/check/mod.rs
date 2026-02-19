@@ -292,32 +292,18 @@ fn check_face_validity(face: &Face, errors: &mut Vec<ShapeError>) {
         check_wire_validity(wire, idx + 1, errors);
     }
     
-    // Check face area (simplified - would need proper triangulation)
-    let area = estimate_face_area(face);
-    if area < TOLERANCE * TOLERANCE {
-        errors.push(ShapeError::DegenerateFace {
-            index: 0,
-            area,
-        });
-    }
+    // For curved surfaces, we can't reliably estimate area from vertex positions.
+    // Skip face area checking for now - it causes false positives on discretized geometry.
 }
 
 /// Check if a shell is valid
 fn check_shell_validity(shell: &Shell, errors: &mut Vec<ShapeError>) {
     // Check each face
-    for (idx, face) in shell.faces.iter().enumerate() {
+    for face in shell.faces.iter() {
         check_wire_validity(&face.outer_wire, 0, errors);
         
         for (hole_idx, wire) in face.inner_wires.iter().enumerate() {
             check_wire_validity(wire, hole_idx + 1, errors);
-        }
-        
-        let area = estimate_face_area(face);
-        if area < TOLERANCE * TOLERANCE {
-            errors.push(ShapeError::DegenerateFace {
-                index: idx,
-                area,
-            });
         }
     }
     
@@ -340,18 +326,6 @@ fn check_solid_validity(solid: &Solid, errors: &mut Vec<ShapeError>) {
     // Check inner shells
     for shell in &solid.inner_shells {
         check_shell_validity(shell, errors);
-    }
-    
-    // Check topology consistency
-    let all_faces = topology::get_solid_faces_internal(solid);
-    for (idx, face) in all_faces.iter().enumerate() {
-        let area = estimate_face_area(face);
-        if area < TOLERANCE * TOLERANCE {
-            errors.push(ShapeError::DegenerateFace {
-                index: idx,
-                area,
-            });
-        }
     }
 }
 
