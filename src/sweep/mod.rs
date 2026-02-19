@@ -700,7 +700,7 @@ fn calculate_wire_center(wire: &Wire) -> [f64; 3] {
 fn calculate_wire_characteristic_size(wire: &Wire) -> f64 {
     let center = calculate_wire_center(wire);
     
-    let mut max_dist = 0.0;
+    let mut max_dist: f64 = 0.0;
     for edge in &wire.edges {
         let dx = edge.start.point[0] - center[0];
         let dy = edge.start.point[1] - center[1];
@@ -763,8 +763,8 @@ fn scale_point_around_center(point: &[f64; 3], center: &[f64; 3], scale: f64) ->
 fn create_tapered_faces(
     base_wire: &Wire,
     top_wire: &Wire,
-    center: &[f64; 3],
-    offset: &[f64; 3],
+    _center: &[f64; 3],
+    _offset: &[f64; 3],
     _draft_angle: f64,
 ) -> crate::Result<Vec<Face>> {
     let mut faces = vec![];
@@ -972,6 +972,196 @@ fn rotate_point_around_axis(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_draft_prism_basic() {
+        // Create a simple square wire in the XY plane
+        let v1 = Vertex::new(0.0, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 0.0);
+        let v3 = Vertex::new(1.0, 1.0, 0.0);
+        let v4 = Vertex::new(0.0, 1.0, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        // Extrude with no draft angle (should work like regular prism)
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], 5.0, 0.0);
+        assert!(result.is_ok(), "Basic draft prism should succeed");
+        
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Solid should have faces");
+        assert!(solid.outer_shell.faces.len() >= 6, "Solid should have at least 6 faces (base, top, 4 sides)");
+    }
+
+    #[test]
+    fn test_draft_prism_outward_taper() {
+        // Create a square profile
+        let v1 = Vertex::new(-0.5, -0.5, 0.0);
+        let v2 = Vertex::new(0.5, -0.5, 0.0);
+        let v3 = Vertex::new(0.5, 0.5, 0.0);
+        let v4 = Vertex::new(-0.5, 0.5, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        // Positive draft angle = outward taper
+        let draft_angle = 5.0 * std::f64::consts::PI / 180.0; // 5 degrees
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], 10.0, draft_angle);
+
+        assert!(result.is_ok(), "Outward taper should succeed");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Solid should have faces");
+    }
+
+    #[test]
+    fn test_draft_prism_inward_taper() {
+        // Create a square profile
+        let v1 = Vertex::new(-0.5, -0.5, 0.0);
+        let v2 = Vertex::new(0.5, -0.5, 0.0);
+        let v3 = Vertex::new(0.5, 0.5, 0.0);
+        let v4 = Vertex::new(-0.5, 0.5, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        // Negative draft angle = inward taper
+        let draft_angle = -3.0 * std::f64::consts::PI / 180.0; // -3 degrees
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], 10.0, draft_angle);
+
+        assert!(result.is_ok(), "Inward taper should succeed");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Solid should have faces");
+    }
+
+    #[test]
+    fn test_draft_prism_invalid_height() {
+        let v1 = Vertex::new(0.0, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 0.0);
+        let v3 = Vertex::new(1.0, 1.0, 0.0);
+        let v4 = Vertex::new(0.0, 1.0, 0.0);
+
+        let edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+
+        let wire = Wire {
+            edges,
+            closed: true,
+        };
+
+        // Negative height should fail
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], -5.0, 0.0);
+        assert!(result.is_err(), "Negative height should fail");
+
+        // Zero height should fail
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], 0.0, 0.0);
+        assert!(result.is_err(), "Zero height should fail");
+    }
+
+    #[test]
+    fn test_draft_prism_empty_wire() {
+        let wire = Wire {
+            edges: vec![],
+            closed: true,
+        };
+
+        let result = make_draft_prism(&wire, &[0.0, 0.0, 1.0], 5.0, 0.0);
+        assert!(result.is_err(), "Empty wire should fail");
+    }
 
     #[test]
     fn test_revol_rectangle_cylinder() {

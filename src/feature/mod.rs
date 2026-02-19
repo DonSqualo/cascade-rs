@@ -146,7 +146,7 @@ pub fn make_hole_countersunk(
 
     // Create main hole cylinder
     let hole_radius = hole_diameter / 2.0;
-    let mut hole_cylinder = make_cylinder(hole_radius, depth)?;
+    let hole_cylinder = make_cylinder(hole_radius, depth)?;
 
     // Create countersink cone
     // Half angle of the cone in radians (full angle / 2)
@@ -162,7 +162,7 @@ pub fn make_hole_countersunk(
     let actual_cone_depth = cone_depth.min(depth);
     
     use crate::primitive::make_cone;
-    let mut countersink_cone = make_cone(countersink_radius, 0.0, actual_cone_depth)?;
+    let countersink_cone = make_cone(countersink_radius, 0.0, actual_cone_depth)?;
 
     // Combine hole and countersink using boolean union
     // This creates a single solid to subtract
@@ -256,11 +256,11 @@ pub fn make_hole_counterbore(
     // Create main hole cylinder (extends through entire depth)
     let hole_radius = hole_diameter / 2.0;
     let total_depth = counterbore_depth + hole_depth;
-    let mut main_hole = make_cylinder(hole_radius, total_depth)?;
+    let main_hole = make_cylinder(hole_radius, total_depth)?;
 
     // Create counterbore cylinder (top portion only)
     let counterbore_radius = counterbore_diameter / 2.0;
-    let mut counterbore_cylinder = make_cylinder(counterbore_radius, counterbore_depth)?;
+    let counterbore_cylinder = make_cylinder(counterbore_radius, counterbore_depth)?;
 
     // Combine the two cylinders using boolean union
     // This creates a single stepped hole to subtract
@@ -780,5 +780,201 @@ mod tests {
         let ribbed_solid = ribbed.unwrap();
         assert!(ribbed_solid.outer_shell.faces.len() >= solid.outer_shell.faces.len(),
                 "Ribbed solid should have at least as many faces");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_basic() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let countersunk = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,   // hole diameter
+            8.0,   // countersink diameter
+            90.0,  // countersink angle
+            10.0   // depth
+        );
+        
+        assert!(countersunk.is_ok(), "Countersunk hole creation should succeed");
+        let holed = countersunk.unwrap();
+        assert!(!holed.outer_shell.faces.is_empty(), "Result should have faces");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_invalid_diameter() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            -5.0,  // negative hole diameter
+            8.0,
+            90.0,
+            10.0
+        );
+        
+        assert!(result.is_err(), "Negative hole diameter should fail");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_invalid_countersink_diameter() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            8.0,   // hole diameter
+            5.0,   // countersink diameter < hole diameter
+            90.0,
+            10.0
+        );
+        
+        assert!(result.is_err(), "Countersink diameter < hole diameter should fail");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_invalid_angle() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,
+            8.0,
+            180.0,  // invalid angle
+            10.0
+        );
+        
+        assert!(result.is_err(), "Invalid angle (>= 180°) should fail");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_invalid_depth() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,
+            8.0,
+            90.0,
+            0.0   // invalid depth
+        );
+        
+        assert!(result.is_err(), "Zero depth should fail");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_basic() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let counterbore = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,   // hole diameter
+            8.0,   // counterbore diameter
+            3.0,   // counterbore depth
+            7.0    // hole depth
+        );
+        
+        assert!(counterbore.is_ok(), "Counterbore hole creation should succeed");
+        let holed = counterbore.unwrap();
+        assert!(!holed.outer_shell.faces.is_empty(), "Result should have faces");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_invalid_hole_diameter() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            -5.0,  // negative hole diameter
+            8.0,
+            3.0,
+            7.0
+        );
+        
+        assert!(result.is_err(), "Negative hole diameter should fail");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_invalid_counterbore_diameter() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            8.0,   // hole diameter
+            5.0,   // counterbore diameter < hole diameter
+            3.0,
+            7.0
+        );
+        
+        assert!(result.is_err(), "Counterbore diameter < hole diameter should fail");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_invalid_counterbore_depth() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,
+            8.0,
+            -3.0,  // negative counterbore depth
+            7.0
+        );
+        
+        assert!(result.is_err(), "Negative counterbore depth should fail");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_invalid_hole_depth() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 1.0],
+            5.0,
+            8.0,
+            3.0,
+            0.0   // zero hole depth
+        );
+        
+        assert!(result.is_err(), "Zero hole depth should fail");
+    }
+
+    #[test]
+    fn test_make_hole_counterbore_zero_direction() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_counterbore(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],  // zero direction vector
+            5.0,
+            8.0,
+            3.0,
+            7.0
+        );
+        
+        assert!(result.is_err(), "Zero direction vector should fail");
+    }
+
+    #[test]
+    fn test_make_hole_countersunk_zero_direction() {
+        let solid = make_box(20.0, 20.0, 20.0).expect("Failed to create box");
+        let result = make_hole_countersunk(
+            &solid,
+            [10.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],  // zero direction vector
+            5.0,
+            8.0,
+            90.0,
+            10.0
+        );
+        
+        assert!(result.is_err(), "Zero direction vector should fail");
     }
 }

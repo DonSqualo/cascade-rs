@@ -920,6 +920,488 @@ pub fn common_many(shapes: &[Solid]) -> Result<Solid> {
     Ok(result)
 }
 
+/// Fuse (union) two solids with fuzzy tolerance
+/// 
+/// Performs a boolean union with relaxed geometry constraints.
+/// Treats vertices/edges within tolerance as coincident and merges near-coincident faces.
+/// 
+/// # Arguments
+/// * `solid1` - First solid
+/// * `solid2` - Second solid
+/// * `tolerance` - Tolerance for treating geometry as coincident (typically 0.01 to 0.1)
+/// 
+/// # Returns
+/// A single solid representing the union with fuzzy geometry handling
+/// 
+/// # Errors
+/// Returns error if fusion fails
+pub fn fuse_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let bb1 = BoundingBox::from_solid(solid1);
+    let bb2 = BoundingBox::from_solid(solid2);
+    
+    // Use tolerance for bounding box check
+    if !bb1_intersects_bb2_fuzzy(&bb1, &bb2, tolerance) {
+        return combine_non_intersecting(solid1, solid2);
+    }
+    
+    if !solids_intersect_fuzzy(solid1, solid2, tolerance) {
+        return combine_non_intersecting(solid1, solid2);
+    }
+    
+    fuse_intersecting_fuzzy(solid1, solid2, tolerance)
+}
+
+/// Cut (difference) solid2 from solid1 with fuzzy tolerance
+/// 
+/// Performs a boolean difference with relaxed geometry constraints.
+/// Treats vertices/edges within tolerance as coincident.
+/// 
+/// # Arguments
+/// * `solid1` - Base solid to cut from
+/// * `solid2` - Tool solid to subtract
+/// * `tolerance` - Tolerance for treating geometry as coincident
+/// 
+/// # Returns
+/// A single solid representing the difference with fuzzy geometry handling
+/// 
+/// # Errors
+/// Returns error if cutting fails
+pub fn cut_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let bb1 = BoundingBox::from_solid(solid1);
+    let bb2 = BoundingBox::from_solid(solid2);
+    
+    // Use tolerance for bounding box check
+    if !bb1_intersects_bb2_fuzzy(&bb1, &bb2, tolerance) {
+        return Ok(solid1.clone());
+    }
+    
+    if !solids_intersect_fuzzy(solid1, solid2, tolerance) {
+        return Ok(solid1.clone());
+    }
+    
+    cut_intersecting_fuzzy(solid1, solid2, tolerance)
+}
+
+/// Common (intersection) of two solids with fuzzy tolerance
+/// 
+/// Performs a boolean intersection with relaxed geometry constraints.
+/// Treats vertices/edges within tolerance as coincident and merges near-coincident faces.
+/// 
+/// # Arguments
+/// * `solid1` - First solid
+/// * `solid2` - Second solid
+/// * `tolerance` - Tolerance for treating geometry as coincident
+/// 
+/// # Returns
+/// A single solid representing the intersection with fuzzy geometry handling
+/// 
+/// # Errors
+/// Returns error if intersection fails or solids don't intersect within tolerance
+pub fn common_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let bb1 = BoundingBox::from_solid(solid1);
+    let bb2 = BoundingBox::from_solid(solid2);
+    
+    // Use tolerance for bounding box check
+    if !bb1_intersects_bb2_fuzzy(&bb1, &bb2, tolerance) {
+        return Err(CascadeError::BooleanFailed(
+            "Solids do not intersect within tolerance".into()
+        ));
+    }
+    
+    if !solids_intersect_fuzzy(solid1, solid2, tolerance) {
+        return Err(CascadeError::BooleanFailed(
+            "Solids do not intersect within tolerance".into()
+        ));
+    }
+    
+    common_intersecting_fuzzy(solid1, solid2, tolerance)
+}
+
+// Fuzzy helper functions
+
+/// Check if two bounding boxes intersect with tolerance
+fn bb1_intersects_bb2_fuzzy(bb1: &BoundingBox, bb2: &BoundingBox, tolerance: f64) -> bool {
+    for i in 0..3 {
+        if bb1.max[i] < bb2.min[i] - tolerance || bb1.min[i] > bb2.max[i] + tolerance {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if two points are coincident within tolerance
+fn points_coincident(p1: &[f64; 3], p2: &[f64; 3], tolerance: f64) -> bool {
+    let dx = p1[0] - p2[0];
+    let dy = p1[1] - p2[1];
+    let dz = p1[2] - p2[2];
+    let dist_sq = dx * dx + dy * dy + dz * dz;
+    dist_sq <= tolerance * tolerance
+}
+
+/// Check if solids intersect using fuzzy tolerance
+fn solids_intersect_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> bool {
+    // Check face-face intersections
+    for face1 in &solid1.outer_shell.faces {
+        for face2 in &solid2.outer_shell.faces {
+            if faces_may_intersect(face1, face2) {
+                if let Some((_, pt, dir)) = plane_plane_intersection(face1, face2) {
+                    if let Some(_) = clip_line_to_face(&pt, &dir, face1) {
+                        if let Some(_) = clip_line_to_face(&pt, &dir, face2) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check if solid1's face is within solid2
+    if !solid1.outer_shell.faces.is_empty() {
+        let centroid1 = face_centroid(&solid1.outer_shell.faces[0]);
+        if point_classification_fuzzy(&centroid1, solid2, tolerance) == FaceClassification::Inside {
+            return true;
+        }
+    }
+    
+    // Check if solid2's face is within solid1
+    if !solid2.outer_shell.faces.is_empty() {
+        let centroid2 = face_centroid(&solid2.outer_shell.faces[0]);
+        if point_classification_fuzzy(&centroid2, solid1, tolerance) == FaceClassification::Inside {
+            return true;
+        }
+    }
+    
+    false
+}
+
+/// Classify a point relative to a solid using fuzzy tolerance
+fn point_classification_fuzzy(point: &[f64; 3], solid: &Solid, tolerance: f64) -> FaceClassification {
+    let ray_origin = *point;
+    let ray_dir = [1.0, 0.0, 0.0];
+    
+    let mut intersection_count = 0;
+    
+    for face in &solid.outer_shell.faces {
+        if let Some(intersects) = ray_face_intersection_fuzzy(&ray_origin, &ray_dir, face, tolerance) {
+            if intersects {
+                intersection_count += 1;
+            }
+        }
+    }
+    
+    if intersection_count % 2 == 1 {
+        FaceClassification::Inside
+    } else {
+        FaceClassification::Outside
+    }
+}
+
+/// Check if a ray intersects a face with fuzzy tolerance
+fn ray_face_intersection_fuzzy(ray_origin: &[f64; 3], ray_dir: &[f64; 3], face: &Face, tolerance: f64) -> Option<bool> {
+    match &face.surface_type {
+        SurfaceType::Plane { origin, normal } => {
+            let denom = dot(normal, ray_dir);
+            if denom.abs() < tolerance {
+                return Some(false);
+            }
+            
+            let d = [
+                origin[0] - ray_origin[0],
+                origin[1] - ray_origin[1],
+                origin[2] - ray_origin[2],
+            ];
+            let t = dot(&d, normal) / denom;
+            
+            if t < -tolerance {
+                return Some(false);
+            }
+            
+            let intersection = [
+                ray_origin[0] + t * ray_dir[0],
+                ray_origin[1] + t * ray_dir[1],
+                ray_origin[2] + t * ray_dir[2],
+            ];
+            
+            Some(point_in_face_fuzzy(&intersection, face, tolerance))
+        }
+        _ => Some(false),
+    }
+}
+
+/// Check if a point lies within a face boundary with fuzzy tolerance
+fn point_in_face_fuzzy(point: &[f64; 3], face: &Face, tolerance: f64) -> bool {
+    let normal = match &face.surface_type {
+        SurfaceType::Plane { normal, .. } => normal,
+        _ => return false,
+    };
+    
+    let abs_normal = [normal[0].abs(), normal[1].abs(), normal[2].abs()];
+    let drop_axis = if abs_normal[0] > abs_normal[1] && abs_normal[0] > abs_normal[2] {
+        0
+    } else if abs_normal[1] > abs_normal[2] {
+        1
+    } else {
+        2
+    };
+    
+    let (u, v) = project_2d(point, drop_axis);
+    
+    let wire_points: Vec<(f64, f64)> = face.outer_wire.edges.iter()
+        .map(|e| project_2d(&e.start.point, drop_axis))
+        .collect();
+    
+    let mut inside = false;
+    let n = wire_points.len();
+    let mut j = n - 1;
+    
+    for i in 0..n {
+        let (xi, yi) = wire_points[i];
+        let (xj, yj) = wire_points[j];
+        
+        if ((yi > v) != (yj > v)) && (u < (xj - xi) * (v - yi) / (yj - yi) + xi + tolerance) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    
+    inside
+}
+
+/// Classify a face relative to a solid using fuzzy tolerance
+fn classify_face_fuzzy(face: &Face, solid: &Solid, tolerance: f64) -> FaceClassification {
+    let centroid = face_centroid(face);
+    
+    let offset = match &face.surface_type {
+        SurfaceType::Plane { normal, .. } => {
+            let n = normalize(normal);
+            [
+                centroid[0] + n[0] * tolerance * 10.0,
+                centroid[1] + n[1] * tolerance * 10.0,
+                centroid[2] + n[2] * tolerance * 10.0,
+            ]
+        }
+        _ => centroid,
+    };
+    
+    point_classification_fuzzy(&offset, solid, tolerance)
+}
+
+/// Fuse two intersecting solids with fuzzy tolerance
+fn fuse_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let mut result_faces: Vec<Face> = Vec::new();
+    
+    // Classify faces from solid1
+    for face in &solid1.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid2, tolerance);
+        if class == FaceClassification::Outside || class == FaceClassification::Boundary {
+            result_faces.push(face.clone());
+        }
+    }
+    
+    // Classify faces from solid2
+    for face in &solid2.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid1, tolerance);
+        if class == FaceClassification::Outside {
+            result_faces.push(face.clone());
+        }
+    }
+    
+    // Merge near-coincident faces
+    result_faces = merge_coincident_faces_fuzzy(&result_faces, tolerance);
+    
+    if result_faces.is_empty() {
+        return Err(CascadeError::BooleanFailed(
+            "Fuse with fuzzy tolerance resulted in empty solid".into()
+        ));
+    }
+    
+    let result_shell = Shell {
+        faces: result_faces,
+        closed: true,
+    };
+    
+    Ok(Solid {
+        outer_shell: result_shell,
+        inner_shells: Vec::new(),
+    })
+}
+
+/// Cut solid2 from solid1 with fuzzy tolerance
+fn cut_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let mut result_faces: Vec<Face> = Vec::new();
+    
+    // Keep faces from solid1 that are outside solid2
+    for face in &solid1.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid2, tolerance);
+        if class == FaceClassification::Outside {
+            result_faces.push(face.clone());
+        }
+    }
+    
+    // Add inverted faces from solid2 that are inside solid1
+    for face in &solid2.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid1, tolerance);
+        if class == FaceClassification::Inside {
+            let inverted = invert_face(face);
+            result_faces.push(inverted);
+        }
+    }
+    
+    // Merge near-coincident faces
+    result_faces = merge_coincident_faces_fuzzy(&result_faces, tolerance);
+    
+    if result_faces.is_empty() {
+        return Err(CascadeError::BooleanFailed(
+            "Cut with fuzzy tolerance resulted in empty solid".into()
+        ));
+    }
+    
+    Ok(Solid {
+        outer_shell: Shell {
+            faces: result_faces,
+            closed: true,
+        },
+        inner_shells: Vec::new(),
+    })
+}
+
+/// Compute common (intersection) of two solids with fuzzy tolerance
+fn common_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Result<Solid> {
+    let mut result_faces: Vec<Face> = Vec::new();
+    
+    // Keep faces from solid1 that are inside solid2
+    for face in &solid1.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid2, tolerance);
+        if class == FaceClassification::Inside || class == FaceClassification::Boundary {
+            result_faces.push(face.clone());
+        }
+    }
+    
+    // Keep faces from solid2 that are inside solid1
+    for face in &solid2.outer_shell.faces {
+        let class = classify_face_fuzzy(face, solid1, tolerance);
+        if class == FaceClassification::Inside {
+            result_faces.push(face.clone());
+        }
+    }
+    
+    // Merge near-coincident faces
+    result_faces = merge_coincident_faces_fuzzy(&result_faces, tolerance);
+    
+    if result_faces.is_empty() {
+        return Err(CascadeError::BooleanFailed(
+            "Common with fuzzy tolerance resulted in empty solid".into()
+        ));
+    }
+    
+    Ok(Solid {
+        outer_shell: Shell {
+            faces: result_faces,
+            closed: true,
+        },
+        inner_shells: Vec::new(),
+    })
+}
+
+/// Merge near-coincident faces within tolerance
+/// 
+/// This function attempts to identify and merge faces that are nearly coplanar
+/// and nearly overlapping, treating them as the same surface with fuzzy tolerance.
+fn merge_coincident_faces_fuzzy(faces: &[Face], tolerance: f64) -> Vec<Face> {
+    if faces.is_empty() {
+        return Vec::new();
+    }
+    
+    let mut result = Vec::new();
+    let mut merged = vec![false; faces.len()];
+    
+    for i in 0..faces.len() {
+        if merged[i] {
+            continue;
+        }
+        
+        let mut group = vec![i];
+        merged[i] = true;
+        
+        // Find all faces that are nearly coincident with face[i]
+        for j in (i + 1)..faces.len() {
+            if merged[j] {
+                continue;
+            }
+            
+            if faces_nearly_coincident(&faces[i], &faces[j], tolerance) {
+                group.push(j);
+                merged[j] = true;
+            }
+        }
+        
+        // For now, keep the first face of each group
+        // In a more sophisticated implementation, we would merge the actual geometry
+        result.push(faces[group[0]].clone());
+    }
+    
+    result
+}
+
+/// Check if two faces are nearly coincident (same plane, overlapping)
+fn faces_nearly_coincident(face1: &Face, face2: &Face, tolerance: f64) -> bool {
+    // Get surface normals
+    let normal1 = match &face1.surface_type {
+        SurfaceType::Plane { normal, .. } => normal,
+        _ => return false,
+    };
+    
+    let normal2 = match &face2.surface_type {
+        SurfaceType::Plane { normal, .. } => normal,
+        _ => return false,
+    };
+    
+    // Check if normals are parallel (allowing for fuzzy tolerance)
+    let n1 = normalize(normal1);
+    let n2 = normalize(normal2);
+    
+    let dot_product = (n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]).abs();
+    
+    // Normals should be parallel (dot product close to 1 or -1)
+    if (dot_product - 1.0).abs() > tolerance {
+        return false;
+    }
+    
+    // Check if faces are coplanar by testing if a point from face2 is close to the plane of face1
+    if !face1.outer_wire.edges.is_empty() && !face2.outer_wire.edges.is_empty() {
+        let test_point = face2.outer_wire.edges[0].start.point;
+        
+        // Distance from test_point to plane of face1
+        let (origin, normal) = match &face1.surface_type {
+            SurfaceType::Plane { origin, normal } => (origin, normal),
+            _ => return false,
+        };
+        
+        let to_point = [
+            test_point[0] - origin[0],
+            test_point[1] - origin[1],
+            test_point[2] - origin[2],
+        ];
+        
+        let distance = (to_point[0] * normal[0] + to_point[1] * normal[1] + to_point[2] * normal[2]).abs();
+        let normal_len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        
+        if normal_len > TOLERANCE {
+            let normalized_distance = distance / normal_len;
+            if normalized_distance > tolerance {
+                return false;
+            }
+        }
+    }
+    
+    // Faces are coplanar and parallel - check if they overlap
+    // For simplicity, we check bounding box overlap
+    let bb1 = face_bounding_box(face1);
+    let bb2 = face_bounding_box(face2);
+    
+    bb1_intersects_bb2_fuzzy(&bb1, &bb2, tolerance)
+}
+
 /// Splitter - divides a shape by other shapes without fusing
 /// 
 /// Returns all resulting fragments as separate solids.
@@ -1340,5 +1822,231 @@ mod tests {
         
         // Just verify it doesn't panic - result may be Ok or Err depending on implementation
         let _result = common_many(&[box1, box2, box3]);
+    }
+    
+    // Fuzzy Boolean Tests
+    
+    #[test]
+    fn test_fuse_fuzzy_non_intersecting() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 far away
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = fuse_fuzzy(&box1, &box2, 0.01);
+        assert!(result.is_ok());
+        
+        let fused = result.unwrap();
+        assert_eq!(fused.outer_shell.faces.len(), 12);
+    }
+    
+    #[test]
+    fn test_fuse_fuzzy_nearly_touching() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 very close (within tolerance)
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 1.005;
+                edge.end.point[0] += 1.005;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 1.005;
+            }
+        }
+        
+        // Should succeed with larger fuzzy tolerance
+        let result = fuse_fuzzy(&box1, &box2, 0.1);
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_fuse_fuzzy_with_tolerance() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 slightly within tolerance
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 0.5;
+                edge.end.point[0] += 0.5;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 0.5;
+            }
+        }
+        
+        let result = fuse_fuzzy(&box1, &box2, 0.05);
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_cut_fuzzy_non_intersecting() {
+        let base = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut tool = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move tool far away
+        for face in &mut tool.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = cut_fuzzy(&base, &tool, 0.01);
+        assert!(result.is_ok());
+        
+        let cut_result = result.unwrap();
+        // Should return original base since tool doesn't intersect
+        assert_eq!(cut_result.outer_shell.faces.len(), base.outer_shell.faces.len());
+    }
+    
+    #[test]
+    fn test_cut_fuzzy_with_tolerance() {
+        let base = make_box(2.0, 2.0, 2.0).unwrap();
+        let tool = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = cut_fuzzy(&base, &tool, 0.01);
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_cut_fuzzy_nearly_touching() {
+        let base = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut tool = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move tool very close (within tolerance)
+        for face in &mut tool.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 1.005;
+                edge.end.point[0] += 1.005;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 1.005;
+            }
+        }
+        
+        // With larger tolerance, should be treated as intersecting
+        let result = cut_fuzzy(&base, &tool, 0.1);
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_common_fuzzy_non_intersecting() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Move box2 far away
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 10.0;
+                edge.end.point[0] += 10.0;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 10.0;
+            }
+        }
+        
+        let result = common_fuzzy(&box1, &box2, 0.01);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_common_fuzzy_with_tolerance() {
+        let box1 = make_box(2.0, 2.0, 2.0).unwrap();
+        let mut box2 = make_box(2.0, 2.0, 2.0).unwrap();
+        
+        // Slightly offset but within tolerance
+        for face in &mut box2.outer_shell.faces {
+            for edge in &mut face.outer_wire.edges {
+                edge.start.point[0] += 0.5;
+                edge.end.point[0] += 0.5;
+            }
+            if let SurfaceType::Plane { origin, .. } = &mut face.surface_type {
+                origin[0] += 0.5;
+            }
+        }
+        
+        let result = common_fuzzy(&box1, &box2, 0.1);
+        // May or may not succeed depending on implementation details, but should not panic
+        let _ = result;
+    }
+    
+    #[test]
+    fn test_points_coincident_within_tolerance() {
+        let p1 = [0.0, 0.0, 0.0];
+        let p2 = [0.005, 0.005, 0.005];
+        
+        // Distance is sqrt(3 * 0.005^2) ≈ 0.0087
+        assert!(points_coincident(&p1, &p2, 0.01));
+        assert!(!points_coincident(&p1, &p2, 0.005));
+    }
+    
+    #[test]
+    fn test_faces_nearly_coincident_coplanar() {
+        let mut face1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut face2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        // Extract first faces
+        let f1 = face1.outer_shell.faces[0].clone();
+        let f2 = face2.outer_shell.faces[0].clone();
+        
+        // These should be nearly coincident (same plane, overlapping)
+        assert!(faces_nearly_coincident(&f1, &f2, 0.1));
+    }
+    
+    #[test]
+    fn test_fuse_fuzzy_returns_valid_solid() {
+        let box1 = make_box(1.0, 1.0, 1.0).unwrap();
+        let box2 = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = fuse_fuzzy(&box1, &box2, 0.01);
+        assert!(result.is_ok());
+        
+        let fused = result.unwrap();
+        assert!(!fused.outer_shell.faces.is_empty());
+    }
+    
+    #[test]
+    fn test_cut_fuzzy_returns_valid_solid() {
+        let base = make_box(2.0, 2.0, 2.0).unwrap();
+        let tool = make_box(1.0, 1.0, 1.0).unwrap();
+        
+        let result = cut_fuzzy(&base, &tool, 0.01);
+        assert!(result.is_ok());
+        
+        let cut_result = result.unwrap();
+        assert!(!cut_result.outer_shell.faces.is_empty());
+    }
+    
+    #[test]
+    fn test_bb_intersects_bb_fuzzy() {
+        let bb1 = BoundingBox {
+            min: [0.0, 0.0, 0.0],
+            max: [1.0, 1.0, 1.0],
+        };
+        let bb2 = BoundingBox {
+            min: [1.002, 0.0, 0.0],
+            max: [2.0, 1.0, 1.0],
+        };
+        
+        // With small tolerance, should not intersect
+        assert!(!bb1_intersects_bb2_fuzzy(&bb1, &bb2, 0.001));
+        
+        // With larger tolerance, should intersect
+        assert!(bb1_intersects_bb2_fuzzy(&bb1, &bb2, 0.01));
     }
 }

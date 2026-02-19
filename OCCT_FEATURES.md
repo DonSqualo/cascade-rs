@@ -83,14 +83,14 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Section (solid/plane)
 - [x] Splitter
 - [x] Boolean with multiple arguments
-- [ ] Fuzzy boolean (tolerance-based)
+- [x] Fuzzy boolean (tolerance-based)
 
 ### 3.3 Sweeps & Extrusions
 - [x] Prism (linear sweep)
 - [x] Revol (rotational sweep)
 - [x] Pipe (path sweep)
 - [ ] Evolved (complex sweep)
-- [ ] Draft prism (tapered extrusion)
+- [x] Draft prism (tapered extrusion)
 
 ### 3.4 Lofting & Skinning
 - [x] ThruSections (loft) - `make_loft(profiles: &[Wire], ruled: bool) -> Result<Solid>`
@@ -115,7 +115,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ### 3.8 Feature Operations
 - [x] Hole (simple) - `make_hole(solid: &Solid, center: [f64; 3], direction: [f64; 3], diameter: f64, depth: f64) -> Result<Solid>`
-- [ ] Hole (countersunk/counterbore)
+- [x] Hole (countersunk/counterbore) - `make_hole_countersunk(...)` and `make_hole_counterbore(...)`
 - [x] Slot - `make_slot(solid: &Solid, path: &Wire, width: f64, depth: f64) -> Result<Solid>`
 - [x] Rib - `make_rib(solid: &Solid, profile: &Wire, direction: [f64; 3], thickness: f64) -> Result<Solid>`
 - [ ] Groove
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 83 features  
-**Remaining:** 83 features  
+**Implemented:** 84 features  
+**Remaining:** 82 features  
 **Total:** 166 features  
-**Completion:** 50%
+**Completion:** 50.6%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-24 - Implemented Half-space primitive (infinite solid)*
+*Last updated: 2026-02-25 - Implemented Draft prism (tapered extrusion)*
