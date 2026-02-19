@@ -12,6 +12,7 @@ pub mod loft;
 pub mod modify;
 pub mod fillet;
 pub mod chamfer;
+pub mod heal;
 pub mod mesh;
 pub mod io;
 pub mod query;
@@ -26,6 +27,7 @@ pub use sweep::make_revol;
 pub use loft::make_loft;
 pub use fillet::make_fillet;
 pub use chamfer::make_chamfer;
+pub use heal::{sew_faces, fix_shape};
 pub use check::{check_valid, check_watertight, check_self_intersection, ShapeError};
 
 /// Tolerance for geometric comparisons

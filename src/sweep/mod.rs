@@ -749,7 +749,7 @@ mod tests {
         };
 
         // Revolve 360 degrees around Z axis to create cylinder-like solid
-        let result = make_revol(&face, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 2.0 * std::f64::consts::PI);
+        let result = make_revol(&face, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 2.0 * std::f64::consts::PI);
 
         assert!(result.is_ok(), "Failed to create 360° revolution solid");
         let solid = result.unwrap();
@@ -802,7 +802,7 @@ mod tests {
         };
 
         // Revolve 90 degrees
-        let result = make_revol(&face, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], std::f64::consts::PI / 2.0);
+        let result = make_revol(&face, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], std::f64::consts::PI / 2.0);
         
         assert!(result.is_ok(), "Failed to create 90° revolution solid");
         let solid = result.unwrap();

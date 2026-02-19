@@ -4,7 +4,7 @@
 //! - Sewing faces together into a shell by matching edges within tolerance
 //! - Fixing common shape issues (degenerate edges, small faces, invalid topology)
 
-use crate::{CascadeError, Face, Shell, Shape, Edge, Wire, Vertex, TOLERANCE};
+use crate::{CascadeError, Face, Shell, Shape, Edge, Wire, TOLERANCE};
 use std::collections::HashMap;
 
 /// Sew faces together into a shell by matching edges within tolerance.
