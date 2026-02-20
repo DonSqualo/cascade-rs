@@ -248,12 +248,12 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 **Completion:** 57.2%
 
 **Priority Order:**
-1. Curve-surface intersection (for boolean operations)
-2. RectangularTrimmedSurface, OffsetSurface, PlateSurface
-3. Full STEP/IGES compliance
-4. Point/curve/surface projection operations
-5. Half-space and CompSolid support
+1. RectangularTrimmedSurface, OffsetSurface, PlateSurface
+2. Full STEP/IGES compliance
+3. Point/curve/surface projection operations
+4. Half-space and CompSolid support
+5. More complex intersection cases (BSpline curves/surfaces)
 
 ---
 
-*Last updated: 2026-03-12 - Implemented Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector, automatically controls control point count based on tolerance*
+*Last updated: 2026-03-13 - Implemented Curve-surface intersection - `intersect_curve_surface(curve: &CurveType, start: [f64;3], end: [f64;3], surface: &SurfaceType) -> Result<Vec<[f64;3]>>` - Analytical solutions for line-plane, line-sphere, line-cylinder, and line-cone intersections; numerical marching for complex curves and surfaces*
