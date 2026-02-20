@@ -149,7 +149,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector
 - [x] Surface approximation - `approximate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize, tolerance: f64) -> Result<SurfaceType>` - Least squares BSpline fitting in both U and V directions with adaptive control point count
 - [x] Curve interpolation - `interpolate_curve(points: &[[f64;3]], degree: usize) -> Result<CurveType>` - Creates a BSpline curve passing exactly through all points using chord-length parameterization and tridiagonal system solver
-- [ ] Surface interpolation
+- [x] Surface interpolation - `interpolate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize) -> Result<SurfaceType>` - BSpline surface passing through 2D grid of points, interpolates rows first (u-direction) then columns (v-direction) with chord-length parameterization
 
 ### 3.12 Constraints-based Construction
 - [ ] Circle tangent to 3 elements
