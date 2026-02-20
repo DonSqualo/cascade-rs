@@ -1,7 +1,3 @@
-// Note: extrema_curve_curve and extrema_point_solid are not yet implemented
-// This test file is disabled until those functions are added to the query module.
-
-/*
 use cascade::{
     extrema_curve_curve, extrema_point_solid,
     make_box,
@@ -50,9 +46,4 @@ fn main() {
     println!("  ✓ Test passed");
     
     println!("\n✅ All tests passed!");
-}
-*/
-
-fn main() {
-    println!("extrema functions are not yet implemented");
 }

@@ -385,6 +385,331 @@ fn calculate_face_center_and_normal(face: &Face) -> ([f64; 3], [f64; 3]) {
     (center, normal)
 }
 
+/// Compute the extremal distance between two curves and the closest points.
+/// 
+/// This function finds the minimum distance between two curves and the points
+/// on each curve that achieve this distance.
+/// 
+/// # Arguments
+/// * `c1` - First curve
+/// * `s1` - Start point of first curve
+/// * `e1` - End point of first curve
+/// * `c2` - Second curve
+/// * `s2` - Start point of second curve
+/// * `e2` - End point of second curve
+/// 
+/// # Returns
+/// A tuple containing:
+/// - `distance` - The minimum distance between the curves
+/// - `point_on_c1` - The point on c1 achieving the minimum distance
+/// - `point_on_c2` - The point on c2 achieving the minimum distance
+pub fn extrema_curve_curve(
+    c1: &crate::brep::CurveType,
+    _s1: [f64; 3],
+    _e1: [f64; 3],
+    c2: &crate::brep::CurveType,
+    _s2: [f64; 3],
+    _e2: [f64; 3],
+) -> Result<(f64, [f64; 3], [f64; 3])> {
+    use crate::curve;
+    
+    // Sample both curves at regular intervals to find initial closest pair
+    let num_samples = 20;
+    let mut best_dist_sq = f64::INFINITY;
+    let mut best_t1 = 0.0;
+    let mut best_t2 = 0.0;
+    
+    // Sample first curve
+    for i1 in 0..=num_samples {
+        let t1 = (i1 as f64) / (num_samples as f64);
+        let p1 = curve::point_at(c1, t1)?;
+        
+        // Sample second curve
+        for i2 in 0..=num_samples {
+            let t2 = (i2 as f64) / (num_samples as f64);
+            let p2 = curve::point_at(c2, t2)?;
+            
+            let dist_sq = distance_squared(&p1, &p2);
+            if dist_sq < best_dist_sq {
+                best_dist_sq = dist_sq;
+                best_t1 = t1;
+                best_t2 = t2;
+            }
+        }
+    }
+    
+    // Refine using local optimization
+    // Try to minimize distance by moving parameters slightly
+    let mut t1 = best_t1;
+    let mut t2 = best_t2;
+    let dt = 1e-6;
+    
+    for _ in 0..20 {
+        let p1 = curve::point_at(c1, t1)?;
+        let p2 = curve::point_at(c2, t2)?;
+        let current_dist_sq = distance_squared(&p1, &p2);
+        
+        // Try moving along t1
+        let p1_plus = curve::point_at(c1, (t1 + dt).min(1.0))?;
+        let dist_plus_1 = distance_squared(&p1_plus, &p2);
+        
+        let p1_minus = curve::point_at(c1, (t1 - dt).max(0.0))?;
+        let dist_minus_1 = distance_squared(&p1_minus, &p2);
+        
+        // Try moving along t2
+        let p2_plus = curve::point_at(c2, (t2 + dt).min(1.0))?;
+        let dist_plus_2 = distance_squared(&p1, &p2_plus);
+        
+        let p2_minus = curve::point_at(c2, (t2 - dt).max(0.0))?;
+        let dist_minus_2 = distance_squared(&p1, &p2_minus);
+        
+        // Find best direction and step
+        let mut improved = false;
+        if dist_plus_1 < current_dist_sq && dist_plus_1 < dist_minus_1 {
+            t1 = (t1 + dt).min(1.0);
+            improved = true;
+        } else if dist_minus_1 < current_dist_sq && dist_minus_1 < dist_plus_1 {
+            t1 = (t1 - dt).max(0.0);
+            improved = true;
+        }
+        
+        if dist_plus_2 < current_dist_sq && dist_plus_2 < dist_minus_2 {
+            t2 = (t2 + dt).min(1.0);
+            improved = true;
+        } else if dist_minus_2 < current_dist_sq && dist_minus_2 < dist_plus_2 {
+            t2 = (t2 - dt).max(0.0);
+            improved = true;
+        }
+        
+        if !improved {
+            break;
+        }
+    }
+    
+    // Get final result
+    let p1_final = curve::point_at(c1, t1)?;
+    let p2_final = curve::point_at(c2, t2)?;
+    let final_dist_sq = distance_squared(&p1_final, &p2_final);
+    let final_dist = final_dist_sq.sqrt();
+    
+    Ok((final_dist, p1_final, p2_final))
+}
+
+/// Compute the extremal distance between a point and a solid, and the closest point on the solid.
+/// 
+/// This function finds the minimum distance from a point to the surface of a solid,
+/// checking all faces and returning the closest point.
+/// 
+/// # Arguments
+/// * `point` - The 3D point
+/// * `solid` - The solid to measure distance to
+/// 
+/// # Returns
+/// A tuple containing:
+/// - `distance` - The minimum distance from the point to the solid surface
+/// - `closest_point` - The closest point on the solid surface
+pub fn extrema_point_solid(
+    point: [f64; 3],
+    solid: &Solid,
+) -> Result<(f64, [f64; 3])> {
+    let mut best_dist = f64::INFINITY;
+    let mut best_point = point;
+    
+    // Check distance to all faces in outer shell
+    for face in &solid.outer_shell.faces {
+        // Project point onto face
+        let plane_dist = project_to_face(point, face)?;
+        
+        if plane_dist.0 < best_dist {
+            best_dist = plane_dist.0;
+            best_point = plane_dist.1;
+        }
+    }
+    
+    // Check distance to all faces in inner shells (voids)
+    for shell in &solid.inner_shells {
+        for face in &shell.faces {
+            let plane_dist = project_to_face(point, face)?;
+            
+            if plane_dist.0 < best_dist {
+                best_dist = plane_dist.0;
+                best_point = plane_dist.1;
+            }
+        }
+    }
+    
+    if best_dist.is_infinite() {
+        return Err(CascadeError::InvalidGeometry(
+            "Could not compute distance to solid".into()
+        ));
+    }
+    
+    Ok((best_dist, best_point))
+}
+
+/// Project a point onto a face and return distance and closest point
+fn project_to_face(point: [f64; 3], face: &Face) -> Result<(f64, [f64; 3])> {
+    use crate::brep::SurfaceType;
+    
+    let (closest_point, _) = match &face.surface_type {
+        SurfaceType::Plane { origin, normal } => {
+            // Distance from point to plane: d = |(p - o) · n|
+            let to_point = [
+                point[0] - origin[0],
+                point[1] - origin[1],
+                point[2] - origin[2],
+            ];
+            
+            let dist_to_plane = dot(&to_point, normal);
+            let closest = [
+                point[0] - dist_to_plane * normal[0],
+                point[1] - dist_to_plane * normal[1],
+                point[2] - dist_to_plane * normal[2],
+            ];
+            
+            (closest, *normal)
+        }
+        
+        SurfaceType::Sphere { center, radius } => {
+            // Closest point on sphere is along the line from center to point
+            let to_point = [
+                point[0] - center[0],
+                point[1] - center[1],
+                point[2] - center[2],
+            ];
+            
+            let dist_to_center = (to_point[0] * to_point[0] + 
+                                 to_point[1] * to_point[1] + 
+                                 to_point[2] * to_point[2]).sqrt();
+            
+            if dist_to_center < 1e-10 {
+                // Point is at center, return center + radius in arbitrary direction
+                ([center[0] + radius, center[1], center[2]], [1.0, 0.0, 0.0])
+            } else {
+                let normalized = [
+                    to_point[0] / dist_to_center,
+                    to_point[1] / dist_to_center,
+                    to_point[2] / dist_to_center,
+                ];
+                
+                let closest = [
+                    center[0] + radius * normalized[0],
+                    center[1] + radius * normalized[1],
+                    center[2] + radius * normalized[2],
+                ];
+                
+                (closest, normalized)
+            }
+        }
+        
+        SurfaceType::Cylinder { origin, axis, radius } => {
+            // Project point onto cylinder axis
+            let to_point = [
+                point[0] - origin[0],
+                point[1] - origin[1],
+                point[2] - origin[2],
+            ];
+            
+            let proj_on_axis = dot(&to_point, axis);
+            let axis_point = [
+                origin[0] + proj_on_axis * axis[0],
+                origin[1] + proj_on_axis * axis[1],
+                origin[2] + proj_on_axis * axis[2],
+            ];
+            
+            let radial = [
+                point[0] - axis_point[0],
+                point[1] - axis_point[1],
+                point[2] - axis_point[2],
+            ];
+            
+            let radial_dist = (radial[0] * radial[0] + 
+                             radial[1] * radial[1] + 
+                             radial[2] * radial[2]).sqrt();
+            
+            if radial_dist < 1e-10 {
+                // Point is on axis, return point on cylinder surface in arbitrary direction
+                let perp = if axis[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+                let normal_dir = cross(axis, &perp);
+                let normal_dist = (normal_dir[0] * normal_dir[0] + 
+                                 normal_dir[1] * normal_dir[1] + 
+                                 normal_dir[2] * normal_dir[2]).sqrt();
+                let normalized_normal = if normal_dist > 1e-10 {
+                    [normal_dir[0] / normal_dist, normal_dir[1] / normal_dist, normal_dir[2] / normal_dist]
+                } else {
+                    [1.0, 0.0, 0.0]
+                };
+                
+                (
+                    [
+                        axis_point[0] + radius * normalized_normal[0],
+                        axis_point[1] + radius * normalized_normal[1],
+                        axis_point[2] + radius * normalized_normal[2],
+                    ],
+                    normalized_normal
+                )
+            } else {
+                let normalized_radial = [
+                    radial[0] / radial_dist,
+                    radial[1] / radial_dist,
+                    radial[2] / radial_dist,
+                ];
+                
+                let closest = [
+                    axis_point[0] + radius * normalized_radial[0],
+                    axis_point[1] + radius * normalized_radial[1],
+                    axis_point[2] + radius * normalized_radial[2],
+                ];
+                
+                (closest, normalized_radial)
+            }
+        }
+        
+        // For other surface types, use face vertices to approximate
+        _ => {
+            let vertices = get_face_vertices(&face.outer_wire);
+            if vertices.len() < 3 {
+                return Err(CascadeError::InvalidGeometry(
+                    "Face has fewer than 3 vertices".into()
+                ));
+            }
+            
+            // Find closest vertex
+            let mut closest = vertices[0];
+            let mut closest_dist_sq = distance_squared(&point, &closest);
+            
+            for v in &vertices[1..] {
+                let dist_sq = distance_squared(&point, v);
+                if dist_sq < closest_dist_sq {
+                    closest_dist_sq = dist_sq;
+                    closest = *v;
+                }
+            }
+            
+            // Estimate normal from vertices
+            let v0 = vertices[0];
+            let v1 = vertices[1];
+            let v2 = vertices[2];
+            
+            let e1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
+            let e2 = [v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]];
+            
+            let mut normal = cross(&e1, &e2);
+            let norm = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+            if norm > 1e-10 {
+                normal = [normal[0] / norm, normal[1] / norm, normal[2] / norm];
+            } else {
+                normal = [0.0, 0.0, 1.0];
+            }
+            
+            (closest, normal)
+        }
+    };
+    
+    let dist = distance_squared(&point, &closest_point).sqrt();
+    Ok((dist, closest_point))
+}
+
 /// Project a point onto a curve and return the parameter and closest point.
 /// 
 /// This function finds the point on a curve that is closest to the given input point.
