@@ -143,7 +143,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Curve-surface intersection - `intersect_curve_surface(curve: &CurveType, start: [f64;3], end: [f64;3], surface: &SurfaceType) -> Result<Vec<[f64;3]>>` - Analytical line-plane, line-sphere, line-cylinder, line-cone intersections; numerical marching for complex curves
 - [x] Surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)
 - [x] Point projection to curve - `project_point_to_curve(point: [f64;3], curve: &CurveType, start: [f64;3], end: [f64;3]) -> Result<(f64, [f64;3])>` - Handles line, arc, bezier, bspline, parabola, hyperbola, ellipse, trimmed, and offset curves
-- [ ] Point projection to surface
+- [x] Point projection to surface
 - [ ] Curve projection to surface
 - [x] Extrema (distance) calculation - `extrema_curve_curve(c1, s1, e1, c2, s2, e2)` and `extrema_point_solid(point, solid)`
 - [x] Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector
