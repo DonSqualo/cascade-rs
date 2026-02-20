@@ -147,7 +147,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Curve projection to surface - `project_curve_to_surface(curve: &CurveType, start: [f64;3], end: [f64;3], surface: &SurfaceType) -> Result<CurveType>` - Samples curve, projects each point to surface, fits BSpline result with graceful error handling
 - [x] Extrema (distance) calculation - `extrema_curve_curve(c1, s1, e1, c2, s2, e2)` and `extrema_point_solid(point, solid)`
 - [x] Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector
-- [ ] Surface approximation
+- [x] Surface approximation - `approximate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize, tolerance: f64) -> Result<SurfaceType>` - Least squares BSpline fitting in both U and V directions with adaptive control point count
 - [x] Curve interpolation - `interpolate_curve(points: &[[f64;3]], degree: usize) -> Result<CurveType>` - Creates a BSpline curve passing exactly through all points using chord-length parameterization and tridiagonal system solver
 - [ ] Surface interpolation
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 95 features  
-**Remaining:** 71 features  
+**Implemented:** 96 features  
+**Remaining:** 70 features  
 **Total:** 166 features  
-**Completion:** 57.2%
+**Completion:** 57.8%
 
 **Priority Order:**
 1. RectangularTrimmedSurface, OffsetSurface, PlateSurface
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-13 - Implemented Curve-surface intersection - `intersect_curve_surface(curve: &CurveType, start: [f64;3], end: [f64;3], surface: &SurfaceType) -> Result<Vec<[f64;3]>>` - Analytical solutions for line-plane, line-sphere, line-cylinder, and line-cone intersections; numerical marching for complex curves and surfaces*
+*Last updated: 2026-03-14 - Implemented Surface approximation - `approximate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize, tolerance: f64) -> Result<SurfaceType>` - Least squares BSpline fitting in both U and V directions with adaptive control point count based on tolerance*
