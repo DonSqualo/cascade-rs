@@ -2337,4 +2337,81 @@ mod tests {
         assert!(result.0 >= u1 && result.0 <= u2, "u {} not in [{}, {}]", result.0, u1, u2);
         assert!(result.1 >= v1 && result.1 <= v2, "v {} not in [{}, {}]", result.1, v1, v2);
     }
+    
+    #[test]
+    fn test_project_curve_to_plane() {
+        // Test projecting an arc onto a plane
+        use crate::brep::CurveType;
+        
+        // Create a simple arc (circle)
+        let center = [0.0, 0.0, 1.0];  // Circle raised above the plane
+        let radius = 1.0;
+        let curve = CurveType::Arc { center, radius };
+        let start = [1.0, 0.0, 1.0];
+        let end = [1.0, 0.0, 1.0];  // Start and end (for Line compatibility)
+        
+        // Create a plane at z=0
+        let origin = [0.0, 0.0, 0.0];
+        let normal = [0.0, 0.0, 1.0];
+        let surface = SurfaceType::Plane { origin, normal };
+        
+        // Project the curve
+        let result = project_curve_to_surface(&curve, start, end, &surface);
+        assert!(result.is_ok(), "Curve projection failed: {:?}", result.err());
+        
+        let projected = result.unwrap();
+        
+        // The result should be a BSpline curve
+        match projected {
+            CurveType::BSpline { ref control_points, .. } => {
+                // Should have multiple control points
+                assert!(control_points.len() >= 4, "Expected at least 4 control points, got {}", control_points.len());
+                
+                // All control points should be on or near the plane (z ≈ 0)
+                for pt in control_points {
+                    assert!(pt[2].abs() < 0.01, "Point z-coordinate {} not near plane", pt[2]);
+                }
+            }
+            _ => panic!("Expected BSpline curve, got {:?}", projected),
+        }
+    }
+    
+    #[test]
+    fn test_project_curve_to_cylinder() {
+        // Test projecting a line onto a cylinder
+        use crate::brep::CurveType;
+        
+        // Create a line (horizontal line away from the cylinder axis)
+        let curve = CurveType::Line;
+        let start = [2.0, 0.0, 0.0];
+        let end = [2.0, 0.0, 2.0];
+        
+        // Create a cylinder of radius 1
+        let origin = [0.0, 0.0, 0.0];
+        let axis = [0.0, 0.0, 1.0];
+        let radius = 1.0;
+        let surface = SurfaceType::Cylinder { origin, axis, radius };
+        
+        // Project the curve
+        let result = project_curve_to_surface(&curve, start, end, &surface);
+        assert!(result.is_ok(), "Curve projection failed: {:?}", result.err());
+        
+        let projected = result.unwrap();
+        
+        // The result should be a BSpline curve
+        match projected {
+            CurveType::BSpline { ref control_points, .. } => {
+                // Should have multiple control points
+                assert!(control_points.len() >= 4, "Expected at least 4 control points, got {}", control_points.len());
+                
+                // All control points should be on the cylinder surface (distance from axis = radius)
+                for pt in control_points {
+                    let dist_to_axis = (pt[0] * pt[0] + pt[1] * pt[1]).sqrt();
+                    assert!((dist_to_axis - radius).abs() < 0.05, 
+                            "Point distance to axis {} != radius {}", dist_to_axis, radius);
+                }
+            }
+            _ => panic!("Expected BSpline curve, got {:?}", projected),
+        }
+    }
 }

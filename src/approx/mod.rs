@@ -1300,4 +1300,364 @@ mod tests {
         
         Ok(())
     }
+
+    #[test]
+    fn test_approximate_flat_surface() -> Result<()> {
+        // Approximate a flat surface (XY plane at Z=0)
+        let points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [2.0, 1.0, 0.0]],
+            vec![[0.0, 2.0, 0.0], [1.0, 2.0, 0.0], [2.0, 2.0, 0.0]],
+        ];
+
+        let surface = approximate_surface(&points, 1, 1, 0.01)?;
+
+        match surface {
+            SurfaceType::BSpline {
+                control_points,
+                u_degree,
+                v_degree,
+                u_knots,
+                v_knots,
+                ..
+            } => {
+                assert_eq!(u_degree, 1);
+                assert_eq!(v_degree, 1);
+                assert!(control_points.len() >= 2);
+                assert!(control_points[0].len() >= 2);
+                assert!(u_knots.len() > 0);
+                assert!(v_knots.len() > 0);
+            }
+            _ => panic!("Expected BSpline surface"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_approximate_curved_surface() -> Result<()> {
+        // Approximate a curved surface (quadratic)
+        let mut points = Vec::new();
+        for j in 0..4 {
+            let mut row = Vec::new();
+            for i in 0..4 {
+                let u = i as f64 / 3.0;
+                let v = j as f64 / 3.0;
+                let x = u;
+                let y = v;
+                let z = (u * u + v * v) * 0.5; // quadratic surface
+                row.push([x, y, z]);
+            }
+            points.push(row);
+        }
+
+        let surface = approximate_surface(&points, 2, 2, 0.01)?;
+
+        match surface {
+            SurfaceType::BSpline {
+                control_points,
+                u_degree,
+                v_degree,
+                u_knots,
+                v_knots,
+                ..
+            } => {
+                assert_eq!(u_degree, 2);
+                assert_eq!(v_degree, 2);
+                assert!(control_points.len() >= 2);
+                assert!(control_points[0].len() >= 2);
+
+                // Check knot vector dimensions
+                assert_eq!(u_knots.len(), control_points[0].len() + u_degree + 1);
+                assert_eq!(v_knots.len(), control_points.len() + v_degree + 1);
+            }
+            _ => panic!("Expected BSpline surface"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_surface_tight_vs_loose_tolerance() -> Result<()> {
+        // Create a larger point grid
+        let mut points = Vec::new();
+        for j in 0..5 {
+            let mut row = Vec::new();
+            for i in 0..5 {
+                let u = i as f64 / 4.0;
+                let v = j as f64 / 4.0;
+                let x = u;
+                let y = v;
+                let z = (2.0 * u * v).sin();
+                row.push([x, y, z]);
+            }
+            points.push(row);
+        }
+
+        let tight = approximate_surface(&points, 2, 2, 0.0001)?;
+        let loose = approximate_surface(&points, 2, 2, 0.1)?;
+
+        let tight_count = match &tight {
+            SurfaceType::BSpline { control_points, .. } => control_points[0].len(),
+            _ => panic!("Expected BSpline"),
+        };
+
+        let loose_count = match &loose {
+            SurfaceType::BSpline { control_points, .. } => control_points[0].len(),
+            _ => panic!("Expected BSpline"),
+        };
+
+        // Tighter tolerance should use more or equal control points
+        assert!(tight_count >= loose_count);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_surface_invalid_input() {
+        // Empty grid
+        let result = approximate_surface(&[], 1, 1, 0.01);
+        assert!(result.is_err());
+
+        // Single row
+        let points = vec![vec![[0.0; 3], [1.0; 3]]];
+        let result = approximate_surface(&points, 1, 1, 0.01);
+        assert!(result.is_err());
+
+        // Inconsistent row sizes
+        let points = vec![
+            vec![[0.0; 3], [1.0; 3]],
+            vec![[0.0; 3], [1.0; 3], [2.0; 3]],
+        ];
+        let result = approximate_surface(&points, 1, 1, 0.01);
+        assert!(result.is_err());
+
+        // Invalid degree
+        let points = vec![
+            vec![[0.0; 3], [1.0; 3]],
+            vec![[0.0; 3], [1.0; 3]],
+        ];
+        let result = approximate_surface(&points, 0, 1, 0.01);
+        assert!(result.is_err());
+
+        // Invalid tolerance
+        let result = approximate_surface(&points, 1, 1, -0.01);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_surface_degree_vs_control_points() -> Result<()> {
+        let mut points = Vec::new();
+        for j in 0..3 {
+            let mut row = Vec::new();
+            for i in 0..3 {
+                row.push([(i as f64), (j as f64), 0.0]);
+            }
+            points.push(row);
+        }
+
+        // Degree too high should fail
+        let result = approximate_surface(&points, 5, 1, 0.01);
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_surface_knot_vectors() -> Result<()> {
+        let mut points = Vec::new();
+        for j in 0..4 {
+            let mut row = Vec::new();
+            for i in 0..4 {
+                row.push([(i as f64), (j as f64), 0.0]);
+            }
+            points.push(row);
+        }
+
+        let surface = approximate_surface(&points, 2, 2, 0.01)?;
+
+        match surface {
+            SurfaceType::BSpline {
+                control_points,
+                u_degree,
+                v_degree,
+                u_knots,
+                v_knots,
+                ..
+            } => {
+                let n_control_u = control_points[0].len();
+                let n_control_v = control_points.len();
+
+                // Check knot vector lengths
+                assert_eq!(u_knots.len(), n_control_u + u_degree + 1);
+                assert_eq!(v_knots.len(), n_control_v + v_degree + 1);
+
+                // Check clamping at U
+                for i in 0..=u_degree {
+                    assert_eq!(u_knots[i], 0.0);
+                    assert_eq!(u_knots[u_knots.len() - i - 1], 1.0);
+                }
+
+                // Check clamping at V
+                for i in 0..=v_degree {
+                    assert_eq!(v_knots[i], 0.0);
+                    assert_eq!(v_knots[v_knots.len() - i - 1], 1.0);
+                }
+
+                // Check monotonicity
+                for i in 0..u_knots.len() - 1 {
+                    assert!(u_knots[i] <= u_knots[i + 1]);
+                }
+                for i in 0..v_knots.len() - 1 {
+                    assert!(v_knots[i] <= v_knots[i + 1]);
+                }
+            }
+            _ => panic!("Expected BSpline"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_interpolate_surface_simple() -> Result<()> {
+        // Create a simple 3x3 grid of points
+        let points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 0.5], [1.0, 1.0, 0.7], [2.0, 1.0, 0.5]],
+            vec![[0.0, 2.0, 0.0], [1.0, 2.0, 0.0], [2.0, 2.0, 0.0]],
+        ];
+
+        let surface = interpolate_surface(&points, 2, 2)?;
+
+        // Verify we get a BSpline surface
+        match surface {
+            SurfaceType::BSpline {
+                u_degree,
+                v_degree,
+                control_points,
+                u_knots,
+                v_knots,
+                ..
+            } => {
+                assert_eq!(u_degree, 2);
+                assert_eq!(v_degree, 2);
+                // With 3 points in u-direction and degree 2, we should have control points
+                assert!(control_points.len() > 0);
+                assert!(control_points[0].len() > 0);
+                // Check knot vectors
+                assert!(u_knots.len() > 0);
+                assert!(v_knots.len() > 0);
+                // Check clamping
+                assert_eq!(u_knots[0], 0.0);
+                assert_eq!(u_knots[u_knots.len() - 1], 1.0);
+                assert_eq!(v_knots[0], 0.0);
+                assert_eq!(v_knots[v_knots.len() - 1], 1.0);
+            }
+            _ => panic!("Expected BSpline surface"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_interpolate_surface_rectangular() -> Result<()> {
+        // Create a 4x5 rectangular grid
+        let mut points = Vec::new();
+        for j in 0..5 {
+            let mut row = Vec::new();
+            for i in 0..4 {
+                let x = i as f64;
+                let y = j as f64;
+                let z = (x * x + y * y) * 0.1;
+                row.push([x, y, z]);
+            }
+            points.push(row);
+        }
+
+        let surface = interpolate_surface(&points, 3, 3)?;
+
+        match surface {
+            SurfaceType::BSpline {
+                u_degree,
+                v_degree,
+                u_knots,
+                v_knots,
+                ..
+            } => {
+                assert_eq!(u_degree, 3);
+                assert_eq!(v_degree, 3);
+                // Check knot vectors are valid
+                for i in 0..u_knots.len() - 1 {
+                    assert!(u_knots[i] <= u_knots[i + 1], "U knots must be non-decreasing");
+                }
+                for i in 0..v_knots.len() - 1 {
+                    assert!(v_knots[i] <= v_knots[i + 1], "V knots must be non-decreasing");
+                }
+            }
+            _ => panic!("Expected BSpline surface"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_interpolate_surface_invalid_input() {
+        // Empty grid
+        let result = interpolate_surface(&vec![], 2, 2);
+        assert!(result.is_err());
+
+        // Single column
+        let points = vec![vec![[0.0, 0.0, 0.0]]];
+        let result = interpolate_surface(&points, 2, 2);
+        assert!(result.is_err());
+
+        // Inconsistent row sizes
+        let points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 0.0]],
+        ];
+        let result = interpolate_surface(&points, 2, 2);
+        assert!(result.is_err());
+
+        // Degree too high
+        let points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
+        ];
+        let result = interpolate_surface(&points, 5, 2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_interpolate_surface_passes_through_points() -> Result<()> {
+        // Create a simple grid
+        let points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 0.5], [1.0, 1.0, 0.5]],
+        ];
+
+        let surface = interpolate_surface(&points, 1, 1)?;
+
+        // For linear interpolation, the surface should pass through all grid points
+        // (or very close due to numerical precision)
+        match surface {
+            SurfaceType::BSpline {
+                control_points, ..
+            } => {
+                // The corner control points should be close to the input points
+                // For a clamped BSpline interpolation, the endpoints are fixed
+                let start = control_points[0][0];
+                let end = control_points[control_points.len() - 1][control_points[0].len() - 1];
+                
+                // First and last control points should match interpolation data
+                assert!((start[0] - points[0][0][0]).abs() < 1e-10);
+                assert!((start[1] - points[0][0][1]).abs() < 1e-10);
+                assert!((end[0] - points.last().unwrap().last().unwrap()[0]).abs() < 1e-10);
+                assert!((end[1] - points.last().unwrap().last().unwrap()[1]).abs() < 1e-10);
+            }
+            _ => panic!("Expected BSpline surface"),
+        }
+
+        Ok(())
+    }
 }
