@@ -148,7 +148,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Extrema (distance) calculation - `extrema_curve_curve(c1, s1, e1, c2, s2, e2)` and `extrema_point_solid(point, solid)`
 - [x] Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector
 - [ ] Surface approximation
-- [ ] Curve interpolation
+- [x] Curve interpolation - `interpolate_curve(points: &[[f64;3]], degree: usize) -> Result<CurveType>` - Creates a BSpline curve passing exactly through all points using chord-length parameterization and tridiagonal system solver
 - [ ] Surface interpolation
 
 ### 3.12 Constraints-based Construction

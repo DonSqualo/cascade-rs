@@ -43,8 +43,8 @@ pub use check::{check_valid, check_watertight, check_self_intersection, ShapeErr
 pub use intersect::{intersect_surfaces, Curve2D, intersect_curves_2d};
 pub use offset::{thick_solid, make_shell};
 pub use local::{split_face, split_edge, split_edge_at_point, remove_face};
-pub use approx::approximate_curve;
-pub use query::{extrema_curve_curve, extrema_point_solid, project_point_to_curve, bounding_box, mass_properties, MassProperties};
+pub use approx::{approximate_curve, interpolate_curve, interpolate_surface};
+pub use query::{extrema_curve_curve, extrema_point_solid, project_point_to_curve, project_point_to_surface, project_curve_to_surface, bounding_box, mass_properties, MassProperties};
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;
