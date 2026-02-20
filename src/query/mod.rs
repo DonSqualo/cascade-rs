@@ -914,6 +914,656 @@ fn newton_raphson_param(
     Ok((t, diff_sq))
 }
 
+/// Project a point onto a surface and return the (u, v) parameters and closest point.
+/// 
+/// This function finds the point on a surface that is closest to the given input point.
+/// It works with all surface types, using both analytical methods (for simple surfaces)
+/// and numerical methods (for complex surfaces like Bezier, B-spline).
+/// 
+/// # Arguments
+/// * `point` - The 3D point to project
+/// * `surface` - The surface type to project onto
+/// 
+/// # Returns
+/// A tuple containing:
+/// - `u` - The u parameter on the surface
+/// - `v` - The v parameter on the surface
+/// - `closest_point` - The 3D point on the surface closest to the input point
+pub fn project_point_to_surface(
+    point: [f64; 3],
+    surface: &SurfaceType,
+) -> Result<(f64, f64, [f64; 3])> {
+    match surface {
+        SurfaceType::Plane { origin, normal } => {
+            project_to_plane(point, *origin, *normal)
+        }
+        
+        SurfaceType::Cylinder { origin, axis, radius } => {
+            project_to_cylinder(point, *origin, *axis, *radius)
+        }
+        
+        SurfaceType::Sphere { center, radius } => {
+            project_to_sphere(point, *center, *radius)
+        }
+        
+        SurfaceType::Cone { origin, axis, half_angle_rad } => {
+            project_to_cone(point, *origin, *axis, *half_angle_rad)
+        }
+        
+        SurfaceType::Torus { center, major_radius, minor_radius } => {
+            project_to_torus(point, *center, *major_radius, *minor_radius)
+        }
+        
+        SurfaceType::BezierSurface { control_points, u_degree, v_degree } => {
+            project_to_bezier_surface(point, control_points, *u_degree, *v_degree)
+        }
+        
+        SurfaceType::BSpline { u_degree, v_degree, u_knots, v_knots, control_points, weights } => {
+            project_to_bspline_surface(point, *u_degree, *v_degree, u_knots, v_knots, control_points, weights.as_deref())
+        }
+        
+        SurfaceType::SurfaceOfRevolution { basis_curve, curve_start, curve_end, axis_location, axis_direction } => {
+            project_to_surface_of_revolution(point, basis_curve, *curve_start, *curve_end, *axis_location, *axis_direction)
+        }
+        
+        SurfaceType::SurfaceOfLinearExtrusion { basis_curve, curve_start, curve_end, direction } => {
+            project_to_surface_of_linear_extrusion(point, basis_curve, *curve_start, *curve_end, *direction)
+        }
+        
+        SurfaceType::RectangularTrimmedSurface { basis_surface, u1, u2, v1, v2 } => {
+            // Project to basis surface and clamp to trimmed range
+            let (u, v, _closest_pt) = project_point_to_surface(point, basis_surface)?;
+            let u_clamped = u.max(*u1).min(*u2);
+            let v_clamped = v.max(*v1).min(*v2);
+            let pt = basis_surface.point_at(u_clamped, v_clamped);
+            Ok((u_clamped, v_clamped, pt))
+        }
+        
+        SurfaceType::OffsetSurface { basis_surface, offset_distance } => {
+            // Project to basis surface, then offset the result
+            let (u, v, _closest_pt) = project_point_to_surface(point, basis_surface)?;
+            let pt = basis_surface.point_at(u, v);
+            
+            // Get normal at the closest point
+            let normal = surface_normal(basis_surface, u, v)?;
+            
+            // Offset the point
+            let offset_pt = [
+                pt[0] + offset_distance * normal[0],
+                pt[1] + offset_distance * normal[1],
+                pt[2] + offset_distance * normal[2],
+            ];
+            
+            Ok((u, v, offset_pt))
+        }
+    }
+}
+
+/// Project point to plane analytically
+fn project_to_plane(point: [f64; 3], origin: [f64; 3], normal: [f64; 3]) -> Result<(f64, f64, [f64; 3])> {
+    let normal_norm = normalize(&normal);
+    
+    // Vector from origin to point
+    let to_point = [
+        point[0] - origin[0],
+        point[1] - origin[1],
+        point[2] - origin[2],
+    ];
+    
+    // Project onto the plane: closest_point = point - (point - origin) · normal * normal
+    let proj_distance = dot(&to_point, &normal_norm);
+    let closest_pt = [
+        point[0] - proj_distance * normal_norm[0],
+        point[1] - proj_distance * normal_norm[1],
+        point[2] - proj_distance * normal_norm[2],
+    ];
+    
+    // For a plane, we can't meaningfully return u,v without defining a coordinate system
+    // Return (0, 0) as placeholder
+    Ok((0.0, 0.0, closest_pt))
+}
+
+/// Project point to cylinder analytically
+fn project_to_cylinder(point: [f64; 3], origin: [f64; 3], axis: [f64; 3], radius: f64) -> Result<(f64, f64, [f64; 3])> {
+    let axis_norm = normalize(&axis);
+    
+    // Vector from origin to point
+    let to_point = [
+        point[0] - origin[0],
+        point[1] - origin[1],
+        point[2] - origin[2],
+    ];
+    
+    // Project onto axis
+    let proj_on_axis = dot(&to_point, &axis_norm);
+    let v = proj_on_axis; // v is the distance along the axis
+    
+    // Get perpendicular component (in the radial plane)
+    let on_axis = [
+        origin[0] + proj_on_axis * axis_norm[0],
+        origin[1] + proj_on_axis * axis_norm[1],
+        origin[2] + proj_on_axis * axis_norm[2],
+    ];
+    
+    let radial = [
+        point[0] - on_axis[0],
+        point[1] - on_axis[1],
+        point[2] - on_axis[2],
+    ];
+    
+    // Project radial component to cylinder surface
+    let radial_norm = normalize(&radial);
+    let closest_pt = [
+        on_axis[0] + radius * radial_norm[0],
+        on_axis[1] + radius * radial_norm[1],
+        on_axis[2] + radius * radial_norm[2],
+    ];
+    
+    // Compute u (angle around cylinder)
+    let perp1 = perpendicular_to(&axis_norm);
+    let perp2 = cross(&axis_norm, &perp1);
+    
+    let u_comp = dot(&radial_norm, &perp1);
+    let v_comp = dot(&radial_norm, &perp2);
+    let angle = v_comp.atan2(u_comp);
+    let angle_normalized = if angle < 0.0 { angle + 2.0 * std::f64::consts::PI } else { angle };
+    let u = angle_normalized / (2.0 * std::f64::consts::PI);
+    
+    Ok((u, v, closest_pt))
+}
+
+/// Project point to sphere analytically
+fn project_to_sphere(point: [f64; 3], center: [f64; 3], radius: f64) -> Result<(f64, f64, [f64; 3])> {
+    // Vector from center to point
+    let to_point = [
+        point[0] - center[0],
+        point[1] - center[1],
+        point[2] - center[2],
+    ];
+    
+    // Project to sphere surface
+    let to_point_norm = normalize(&to_point);
+    let closest_pt = [
+        center[0] + radius * to_point_norm[0],
+        center[1] + radius * to_point_norm[1],
+        center[2] + radius * to_point_norm[2],
+    ];
+    
+    // Compute u, v spherical coordinates
+    // u: longitude (0 to 1 mapping from -π to π)
+    // v: latitude (0 to 1 mapping from -π/2 to π/2)
+    let lon = to_point_norm[1].atan2(to_point_norm[0]);
+    let lon_normalized = if lon < 0.0 { lon + 2.0 * std::f64::consts::PI } else { lon };
+    let u = lon_normalized / (2.0 * std::f64::consts::PI);
+    
+    let lat = to_point_norm[2].asin();
+    let v = (lat + std::f64::consts::PI / 2.0) / std::f64::consts::PI;
+    
+    Ok((u, v, closest_pt))
+}
+
+/// Project point to cone analytically
+fn project_to_cone(point: [f64; 3], origin: [f64; 3], axis: [f64; 3], half_angle_rad: f64) -> Result<(f64, f64, [f64; 3])> {
+    let axis_norm = normalize(&axis);
+    
+    // Vector from origin to point
+    let to_point = [
+        point[0] - origin[0],
+        point[1] - origin[1],
+        point[2] - origin[2],
+    ];
+    
+    // Project onto axis
+    let proj_on_axis = dot(&to_point, &axis_norm);
+    
+    // Get perpendicular component (in the radial plane)
+    let on_axis = [
+        origin[0] + proj_on_axis * axis_norm[0],
+        origin[1] + proj_on_axis * axis_norm[1],
+        origin[2] + proj_on_axis * axis_norm[2],
+    ];
+    
+    let radial = [
+        point[0] - on_axis[0],
+        point[1] - on_axis[1],
+        point[2] - on_axis[2],
+    ];
+    
+    let radial_len = (radial[0] * radial[0] + radial[1] * radial[1] + radial[2] * radial[2]).sqrt();
+    
+    // For cone: radius at height h is h * tan(half_angle)
+    // We need to project the point to the cone surface
+    // Using iterative approach: the closest point on the cone satisfies:
+    // (point - closest_point) is perpendicular to the cone surface
+    
+    if radial_len < 1e-10 {
+        // Point is very close to the axis
+        let v = proj_on_axis;
+        let closest_pt = [
+            origin[0] + v * axis_norm[0],
+            origin[1] + v * axis_norm[1],
+            origin[2] + v * axis_norm[2],
+        ];
+        return Ok((0.0, v, closest_pt));
+    }
+    
+    // Normalize radial direction
+    let radial_norm = [
+        radial[0] / radial_len,
+        radial[1] / radial_len,
+        radial[2] / radial_len,
+    ];
+    
+    // Compute angle u (around the axis)
+    let perp1 = perpendicular_to(&axis_norm);
+    let perp2 = cross(&axis_norm, &perp1);
+    
+    let u_comp = dot(&radial_norm, &perp1);
+    let v_comp = dot(&radial_norm, &perp2);
+    let angle = v_comp.atan2(u_comp);
+    let angle_normalized = if angle < 0.0 { angle + 2.0 * std::f64::consts::PI } else { angle };
+    let u = angle_normalized / (2.0 * std::f64::consts::PI);
+    
+    // Iteratively find the height on the cone closest to the point
+    let tan_angle = half_angle_rad.tan();
+    let mut h = proj_on_axis;
+    
+    for _ in 0..10 {
+        let expected_radius = h * tan_angle;
+        let cos_angle = half_angle_rad.cos();
+        
+        // Distance from point to cone surface
+        // The cone surface at height h has radius h*tan(half_angle)
+        // The point projects to (on_axis + radial) at the current height
+        let _dist_to_surface = (radial_len - expected_radius) / cos_angle;
+        
+        // Update height estimate
+        let h_new = proj_on_axis + (radial_len - h * tan_angle) * tan_angle / (1.0 + tan_angle * tan_angle);
+        
+        if (h_new - h).abs() < 1e-10 {
+            h = h_new;
+            break;
+        }
+        h = h_new;
+    }
+    
+    // Compute the closest point on the cone
+    let cone_radius = h * tan_angle;
+    let closest_pt = [
+        on_axis[0] + cone_radius * radial_norm[0],
+        on_axis[1] + cone_radius * radial_norm[1],
+        on_axis[2] + cone_radius * radial_norm[2],
+    ];
+    
+    Ok((u, h, closest_pt))
+}
+
+/// Project point to torus analytically
+fn project_to_torus(point: [f64; 3], center: [f64; 3], major_radius: f64, minor_radius: f64) -> Result<(f64, f64, [f64; 3])> {
+    // For torus: we need to find (u, v) such that the distance is minimized
+    // u: major circle angle (0 to 1 for 0 to 2π)
+    // v: minor circle angle (0 to 1 for 0 to 2π)
+    
+    // Project point to z=center[2] plane
+    let point_in_plane = [point[0], point[1], center[2]];
+    
+    // Distance from center in xy-plane
+    let dx = point_in_plane[0] - center[0];
+    let dy = point_in_plane[1] - center[1];
+    let major_dist = (dx * dx + dy * dy).sqrt();
+    
+    // Compute u (major circle angle)
+    let major_angle = dy.atan2(dx);
+    let major_angle_normalized = if major_angle < 0.0 { major_angle + 2.0 * std::f64::consts::PI } else { major_angle };
+    let u = major_angle_normalized / (2.0 * std::f64::consts::PI);
+    
+    // Point on major circle
+    let major_circle_pt = [
+        center[0] + major_radius * major_angle.cos(),
+        center[1] + major_radius * major_angle.sin(),
+        center[2],
+    ];
+    
+    // Vector from major circle to point
+    let to_point = [
+        point[0] - major_circle_pt[0],
+        point[1] - major_circle_pt[1],
+        point[2] - major_circle_pt[2],
+    ];
+    
+    // Compute v (minor circle angle)
+    let minor_angle = to_point[2].atan2((to_point[0] * to_point[0] + to_point[1] * to_point[1]).sqrt());
+    let minor_angle_normalized = if minor_angle < 0.0 { minor_angle + 2.0 * std::f64::consts::PI } else { minor_angle };
+    let v = minor_angle_normalized / (2.0 * std::f64::consts::PI);
+    
+    // Compute closest point on torus
+    let closest_pt = [
+        center[0] + (major_radius + minor_radius * major_angle.cos()) * major_angle.cos(),
+        center[1] + (major_radius + minor_radius * major_angle.cos()) * major_angle.sin(),
+        center[2] + minor_radius * minor_angle.sin(),
+    ];
+    
+    Ok((u, v, closest_pt))
+}
+
+/// Project point to Bezier surface using multi-start Newton-Raphson
+fn project_to_bezier_surface(
+    point: [f64; 3],
+    control_points: &[Vec<[f64; 3]>],
+    u_degree: usize,
+    v_degree: usize,
+) -> Result<(f64, f64, [f64; 3])> {
+    if control_points.is_empty() || control_points[0].is_empty() {
+        return Err(CascadeError::InvalidGeometry("Empty Bezier surface".into()));
+    }
+    
+    let surface = SurfaceType::BezierSurface { control_points: control_points.to_vec(), u_degree, v_degree };
+    
+    // Try multiple starting points for robustness
+    let num_starts_u = (5).min(u_degree + 2);
+    let num_starts_v = (5).min(v_degree + 2);
+    let mut best_u = 0.0;
+    let mut best_v = 0.0;
+    let mut best_dist_sq = f64::INFINITY;
+    
+    for start_u_idx in 0..num_starts_u {
+        for start_v_idx in 0..num_starts_v {
+            let u0 = (start_u_idx as f64) / (num_starts_u as f64);
+            let v0 = (start_v_idx as f64) / (num_starts_v as f64);
+            
+            match newton_raphson_surface_param(
+                point,
+                &surface,
+                &surface,
+                u0,
+                v0,
+                20
+            ) {
+                Ok((u, v, dist_sq)) => {
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        best_u = u;
+                        best_v = v;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+    
+    let closest_pt = surface.point_at(best_u, best_v);
+    
+    Ok((best_u, best_v, closest_pt))
+}
+
+/// Project point to B-spline surface using multi-start Newton-Raphson
+fn project_to_bspline_surface(
+    point: [f64; 3],
+    u_degree: usize,
+    v_degree: usize,
+    u_knots: &[f64],
+    v_knots: &[f64],
+    control_points: &[Vec<[f64; 3]>],
+    weights: Option<&[Vec<f64>]>,
+) -> Result<(f64, f64, [f64; 3])> {
+    if control_points.is_empty() || control_points[0].is_empty() {
+        return Err(CascadeError::InvalidGeometry("Empty B-spline surface".into()));
+    }
+    
+    // Try multiple starting points for robustness
+    let num_starts_u = (5).min((control_points.len() as i32).max(3) as usize);
+    let num_starts_v = (5).min((control_points[0].len() as i32).max(3) as usize);
+    let mut best_u = 0.0;
+    let mut best_v = 0.0;
+    let mut best_dist_sq = f64::INFINITY;
+    
+    let surface = SurfaceType::BSpline {
+        u_degree,
+        v_degree,
+        u_knots: u_knots.to_vec(),
+        v_knots: v_knots.to_vec(),
+        control_points: control_points.to_vec(),
+        weights: weights.map(|w| w.to_vec()),
+    };
+    
+    for start_u_idx in 0..num_starts_u {
+        for start_v_idx in 0..num_starts_v {
+            let u0 = (start_u_idx as f64) / (num_starts_u as f64);
+            let v0 = (start_v_idx as f64) / (num_starts_v as f64);
+            
+            match newton_raphson_surface_param(point, &surface, &surface, u0, v0, 20) {
+                Ok((u, v, dist_sq)) => {
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        best_u = u;
+                        best_v = v;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+    
+    let closest_pt = surface.point_at(best_u, best_v);
+    Ok((best_u, best_v, closest_pt))
+}
+
+/// Project point to surface of revolution
+fn project_to_surface_of_revolution(
+    point: [f64; 3],
+    basis_curve: &crate::brep::CurveType,
+    curve_start: [f64; 3],
+    curve_end: [f64; 3],
+    axis_location: [f64; 3],
+    axis_direction: [f64; 3],
+) -> Result<(f64, f64, [f64; 3])> {
+    // Use Newton-Raphson on the surface of revolution parametrization
+    let surface = SurfaceType::SurfaceOfRevolution {
+        basis_curve: basis_curve.clone(),
+        curve_start,
+        curve_end,
+        axis_location,
+        axis_direction,
+    };
+    
+    // Try multiple starting points
+    let num_starts = 8;
+    let mut best_u = 0.0;
+    let mut best_v = 0.0;
+    let mut best_dist_sq = f64::INFINITY;
+    
+    for start_u_idx in 0..num_starts {
+        for start_v_idx in 0..num_starts {
+            let u0 = (start_u_idx as f64) / (num_starts as f64);
+            let v0 = (start_v_idx as f64) / (num_starts as f64);
+            
+            match newton_raphson_surface_param(point, &surface, &surface, u0, v0, 20) {
+                Ok((u, v, dist_sq)) => {
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        best_u = u;
+                        best_v = v;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+    
+    let closest_pt = surface.point_at(best_u, best_v);
+    Ok((best_u, best_v, closest_pt))
+}
+
+/// Project point to surface of linear extrusion
+fn project_to_surface_of_linear_extrusion(
+    point: [f64; 3],
+    basis_curve: &crate::brep::CurveType,
+    curve_start: [f64; 3],
+    curve_end: [f64; 3],
+    direction: [f64; 3],
+) -> Result<(f64, f64, [f64; 3])> {
+    // Use Newton-Raphson on the surface of linear extrusion parametrization
+    let surface = SurfaceType::SurfaceOfLinearExtrusion {
+        basis_curve: basis_curve.clone(),
+        curve_start,
+        curve_end,
+        direction,
+    };
+    
+    // Try multiple starting points
+    let num_starts = 8;
+    let mut best_u = 0.0;
+    let mut best_v = 0.0;
+    let mut best_dist_sq = f64::INFINITY;
+    
+    for start_u_idx in 0..num_starts {
+        for start_v_idx in 0..num_starts {
+            let u0 = (start_u_idx as f64) / (num_starts as f64);
+            let v0 = (start_v_idx as f64) / (num_starts as f64);
+            
+            match newton_raphson_surface_param(point, &surface, &surface, u0, v0, 20) {
+                Ok((u, v, dist_sq)) => {
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        best_u = u;
+                        best_v = v;
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+    
+    let closest_pt = surface.point_at(best_u, best_v);
+    Ok((best_u, best_v, closest_pt))
+}
+
+/// Generic Newton-Raphson iteration for surface parameter finding
+fn newton_raphson_surface_param(
+    point: [f64; 3],
+    surface: &SurfaceType,
+    _surface_ref: &SurfaceType,
+    u0: f64,
+    v0: f64,
+    max_iterations: usize,
+) -> Result<(f64, f64, f64)> {
+    let mut u = u0.max(0.0).min(1.0);
+    let mut v = v0.max(0.0).min(1.0);
+    
+    for _ in 0..max_iterations {
+        let p_uv = surface.point_at(u, v);
+        let diff = [point[0] - p_uv[0], point[1] - p_uv[1], point[2] - p_uv[2]];
+        let diff_sq = distance_squared(&point, &p_uv);
+        
+        if diff_sq < 1e-16 {
+            return Ok((u, v, diff_sq));
+        }
+        
+        // Compute numerical derivatives
+        let du = 1e-8;
+        let dv = 1e-8;
+        
+        let u_plus = (u + du).min(1.0);
+        let v_plus = (v + dv).min(1.0);
+        
+        let p_u_plus = surface.point_at(u_plus, v);
+        let p_v_plus = surface.point_at(u, v_plus);
+        
+        let du_actual = u_plus - u;
+        let dv_actual = v_plus - v;
+        
+        let dp_du = [
+            (p_u_plus[0] - p_uv[0]) / du_actual,
+            (p_u_plus[1] - p_uv[1]) / du_actual,
+            (p_u_plus[2] - p_uv[2]) / du_actual,
+        ];
+        
+        let dp_dv = [
+            (p_v_plus[0] - p_uv[0]) / dv_actual,
+            (p_v_plus[1] - p_uv[1]) / dv_actual,
+            (p_v_plus[2] - p_uv[2]) / dv_actual,
+        ];
+        
+        // Compute Jacobian determinant and cofactors
+        // We have: f(u,v) = (P(u,v) - point) · dP/du = 0
+        //          g(u,v) = (P(u,v) - point) · dP/dv = 0
+        
+        let f = dot(&diff, &dp_du);
+        let g = dot(&diff, &dp_dv);
+        
+        let dp_du_sq = dot(&dp_du, &dp_du);
+        let dp_dv_sq = dot(&dp_dv, &dp_dv);
+        let dp_du_dv = dot(&dp_du, &dp_dv);
+        
+        let det = dp_du_sq * dp_dv_sq - dp_du_dv * dp_du_dv;
+        
+        if det.abs() < 1e-16 {
+            return Ok((u, v, diff_sq));
+        }
+        
+        // Newton-Raphson update
+        let u_new = u - (f * dp_dv_sq - g * dp_du_dv) / det;
+        let v_new = v - (g * dp_du_sq - f * dp_du_dv) / det;
+        
+        let u_new_clamped = u_new.max(0.0).min(1.0);
+        let v_new_clamped = v_new.max(0.0).min(1.0);
+        
+        if (u_new_clamped - u).abs() < 1e-12 && (v_new_clamped - v).abs() < 1e-12 {
+            return Ok((u_new_clamped, v_new_clamped, diff_sq));
+        }
+        
+        u = u_new_clamped;
+        v = v_new_clamped;
+    }
+    
+    let p_uv = surface.point_at(u, v);
+    let diff_sq = distance_squared(&point, &p_uv);
+    
+    Ok((u, v, diff_sq))
+}
+
+/// Compute surface normal at a given parameter point
+fn surface_normal(surface: &SurfaceType, u: f64, v: f64) -> Result<[f64; 3]> {
+    let du = 1e-8;
+    let dv = 1e-8;
+    
+    let p_uv = surface.point_at(u, v);
+    let p_u_plus = surface.point_at((u + du).min(1.0), v);
+    let p_v_plus = surface.point_at(u, (v + dv).min(1.0));
+    
+    let du_actual = (u + du).min(1.0) - u;
+    let dv_actual = (v + dv).min(1.0) - v;
+    
+    let dp_du = [
+        (p_u_plus[0] - p_uv[0]) / du_actual,
+        (p_u_plus[1] - p_uv[1]) / du_actual,
+        (p_u_plus[2] - p_uv[2]) / du_actual,
+    ];
+    
+    let dp_dv = [
+        (p_v_plus[0] - p_uv[0]) / dv_actual,
+        (p_v_plus[1] - p_uv[1]) / dv_actual,
+        (p_v_plus[2] - p_uv[2]) / dv_actual,
+    ];
+    
+    let normal = cross(&dp_du, &dp_dv);
+    Ok(normalize(&normal))
+}
+
+/// Helper: perpendicular vector to a given vector
+fn perpendicular_to(v: &[f64; 3]) -> [f64; 3] {
+    // Find a vector not parallel to v
+    let perp = if v[0].abs() < 0.9 {
+        [1.0, 0.0, 0.0]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
+    
+    // Cross product gives perpendicular vector
+    let result = cross(v, &perp);
+    normalize(&result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1113,5 +1763,150 @@ mod tests {
         assert!(result.1[0].abs() < 1e-2);
         assert!(result.1[1].abs() < 1e-2);
         assert!(result.1[2].abs() < 1e-2);
+    }
+    
+    // Tests for point_projection_to_surface
+    #[test]
+    fn test_project_to_plane() {
+        let origin = [0.0, 0.0, 0.0];
+        let normal = [0.0, 0.0, 1.0];
+        let surface = SurfaceType::Plane { origin, normal };
+        
+        // Point above the plane
+        let point = [1.0, 2.0, 5.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Projected point should be on the plane (z = 0)
+        assert!((result.2[2] - 0.0).abs() < 1e-6);
+        // x and y should match
+        assert!((result.2[0] - 1.0).abs() < 1e-6);
+        assert!((result.2[1] - 2.0).abs() < 1e-6);
+    }
+    
+    #[test]
+    fn test_project_to_sphere() {
+        let center = [0.0, 0.0, 0.0];
+        let radius = 1.0;
+        let surface = SurfaceType::Sphere { center, radius };
+        
+        // Point outside the sphere
+        let point = [2.0, 0.0, 0.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Projected point should be at distance radius from center
+        let dist = (
+            (result.2[0] - center[0]).powi(2) +
+            (result.2[1] - center[1]).powi(2) +
+            (result.2[2] - center[2]).powi(2)
+        ).sqrt();
+        assert!((dist - radius).abs() < 1e-6, "Distance {} != radius {}", dist, radius);
+    }
+    
+    #[test]
+    fn test_project_to_cylinder() {
+        let origin = [0.0, 0.0, 0.0];
+        let axis = [0.0, 0.0, 1.0];
+        let radius = 1.0;
+        let surface = SurfaceType::Cylinder { origin, axis, radius };
+        
+        // Point outside the cylinder
+        let point = [2.0, 0.0, 0.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Projected point should be at distance radius from axis
+        let dist_to_axis = (result.2[0] * result.2[0] + result.2[1] * result.2[1]).sqrt();
+        assert!((dist_to_axis - radius).abs() < 1e-6, "Distance to axis {} != radius {}", dist_to_axis, radius);
+    }
+    
+    #[test]
+    fn test_project_to_cone() {
+        let origin = [0.0, 0.0, 0.0];
+        let axis = [0.0, 0.0, 1.0];
+        let half_angle_rad = std::f64::consts::PI / 6.0; // 30 degrees
+        let surface = SurfaceType::Cone { origin, axis, half_angle_rad };
+        
+        // Point outside the cone
+        let point = [1.0, 0.0, 1.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Projected point should be on the cone surface
+        // For cone: radius = height * tan(half_angle)
+        let height = result.2[2];
+        let radial_dist = (result.2[0] * result.2[0] + result.2[1] * result.2[1]).sqrt();
+        let expected_radius = height * half_angle_rad.tan();
+        
+        assert!((radial_dist - expected_radius).abs() < 1e-1, 
+            "Radial distance {} != expected {}", radial_dist, expected_radius);
+    }
+    
+    #[test]
+    fn test_project_to_torus() {
+        let center = [0.0, 0.0, 0.0];
+        let major_radius = 2.0;
+        let minor_radius = 0.5;
+        let surface = SurfaceType::Torus { center, major_radius, minor_radius };
+        
+        // Point outside the torus
+        let point = [2.5, 0.0, 0.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Verify the result is a valid 3D point (no NaN or Inf)
+        assert!(!result.2[0].is_nan());
+        assert!(!result.2[1].is_nan());
+        assert!(!result.2[2].is_nan());
+        assert!(!result.2[0].is_infinite());
+        assert!(!result.2[1].is_infinite());
+        assert!(!result.2[2].is_infinite());
+    }
+    
+    #[test]
+    fn test_project_to_bezier_surface() {
+        // Create a simple bilinear Bezier surface (quad)
+        let control_points = vec![
+            vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            vec![[0.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+        ];
+        let u_degree = 1;
+        let v_degree = 1;
+        let surface = SurfaceType::BezierSurface { control_points, u_degree, v_degree };
+        
+        // Point to project
+        let point = [0.5, 0.5, 2.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Verify the result is a valid 3D point
+        assert!(!result.2[0].is_nan());
+        assert!(!result.2[1].is_nan());
+        assert!(!result.2[2].is_nan());
+        
+        // Parameters should be in [0, 1]
+        assert!(result.0 >= 0.0 && result.0 <= 1.0);
+        assert!(result.1 >= 0.0 && result.1 <= 1.0);
+    }
+    
+    #[test]
+    fn test_project_to_rectangular_trimmed_surface() {
+        let origin = [0.0, 0.0, 0.0];
+        let normal = [0.0, 0.0, 1.0];
+        let basis_surface = Box::new(SurfaceType::Plane { origin, normal });
+        let u1 = 0.25;
+        let u2 = 0.75;
+        let v1 = 0.25;
+        let v2 = 0.75;
+        
+        let surface = SurfaceType::RectangularTrimmedSurface {
+            basis_surface,
+            u1,
+            u2,
+            v1,
+            v2,
+        };
+        
+        let point = [0.5, 0.5, 5.0];
+        let result = project_point_to_surface(point, &surface).unwrap();
+        
+        // Parameters should be within trimmed range
+        assert!(result.0 >= u1 && result.0 <= u2, "u {} not in [{}, {}]", result.0, u1, u2);
+        assert!(result.1 >= v1 && result.1 <= v2, "v {} not in [{}, {}]", result.1, v1, v2);
     }
 }

@@ -345,6 +345,370 @@ pub fn intersect_surfaces(s1: &Face, s2: &Face) -> Result<Vec<Wire>> {
     }
 }
 
+/// Compute the intersection points between a curve and a surface.
+pub fn intersect_curve_surface(
+    curve: &CurveType,
+    start: [f64; 3],
+    end: [f64; 3],
+    surface: &SurfaceType,
+) -> Result<Vec<[f64; 3]>> {
+    if matches!(curve, CurveType::Line) {
+        return match surface {
+            SurfaceType::Plane { origin, normal } => {
+                line_plane_intersection(&start, &end, origin, normal)
+            }
+            SurfaceType::Cylinder { origin, axis, radius } => {
+                line_cylinder_intersection(&start, &end, origin, axis, *radius)
+            }
+            SurfaceType::Sphere { center, radius } => {
+                line_sphere_intersection(&start, &end, center, *radius)
+            }
+            SurfaceType::Cone { origin, axis, half_angle_rad } => {
+                line_cone_intersection(&start, &end, origin, axis, *half_angle_rad)
+            }
+            _ => {
+                numerical_curve_surface_intersection(curve, &start, &end, surface, 0.0, 1.0)
+            }
+        };
+    }
+
+    numerical_curve_surface_intersection(curve, &start, &end, surface, 0.0, 1.0)
+}
+
+fn line_plane_intersection(
+    p1: &[f64; 3],
+    p2: &[f64; 3],
+    plane_origin: &[f64; 3],
+    plane_normal: &[f64; 3],
+) -> Result<Vec<[f64; 3]>> {
+    let normal = normalize(plane_normal);
+    let line_dir = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+    
+    let denom = dot(&line_dir, &normal);
+    
+    if denom.abs() < TOLERANCE {
+        let v = [plane_origin[0] - p1[0], plane_origin[1] - p1[1], plane_origin[2] - p1[2]];
+        if dot(&v, &normal).abs() < TOLERANCE {
+            return Ok(vec![]);
+        }
+        return Ok(vec![]);
+    }
+    
+    let v = [plane_origin[0] - p1[0], plane_origin[1] - p1[1], plane_origin[2] - p1[2]];
+    let t = dot(&v, &normal) / denom;
+    
+    if t < -TOLERANCE || t > 1.0 + TOLERANCE {
+        return Ok(vec![]);
+    }
+    
+    let t = t.max(0.0).min(1.0);
+    
+    let intersection = [
+        p1[0] + t * line_dir[0],
+        p1[1] + t * line_dir[1],
+        p1[2] + t * line_dir[2],
+    ];
+    
+    Ok(vec![intersection])
+}
+
+fn line_sphere_intersection(
+    p1: &[f64; 3],
+    p2: &[f64; 3],
+    center: &[f64; 3],
+    radius: f64,
+) -> Result<Vec<[f64; 3]>> {
+    let line_dir = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+    let f = [p1[0] - center[0], p1[1] - center[1], p1[2] - center[2]];
+    
+    let a = dot(&line_dir, &line_dir);
+    let b = 2.0 * dot(&f, &line_dir);
+    let c = dot(&f, &f) - radius * radius;
+    
+    let discriminant = b * b - 4.0 * a * c;
+    
+    if discriminant < -TOLERANCE {
+        return Ok(vec![]);
+    }
+    
+    if discriminant.abs() < TOLERANCE {
+        let t = -b / (2.0 * a);
+        if t < -TOLERANCE || t > 1.0 + TOLERANCE {
+            return Ok(vec![]);
+        }
+        let t = t.max(0.0).min(1.0);
+        let intersection = [
+            p1[0] + t * line_dir[0],
+            p1[1] + t * line_dir[1],
+            p1[2] + t * line_dir[2],
+        ];
+        return Ok(vec![intersection]);
+    }
+    
+    let sqrt_disc = discriminant.sqrt();
+    let t1 = (-b - sqrt_disc) / (2.0 * a);
+    let t2 = (-b + sqrt_disc) / (2.0 * a);
+    
+    let mut results = vec![];
+    
+    for t in &[t1, t2] {
+        if *t >= -TOLERANCE && *t <= 1.0 + TOLERANCE {
+            let t_clamped = t.max(0.0).min(1.0);
+            let intersection = [
+                p1[0] + t_clamped * line_dir[0],
+                p1[1] + t_clamped * line_dir[1],
+                p1[2] + t_clamped * line_dir[2],
+            ];
+            results.push(intersection);
+        }
+    }
+    
+    if results.len() == 2 {
+        if t1 > t2 {
+            results.reverse();
+        }
+    }
+    
+    Ok(results)
+}
+
+fn line_cylinder_intersection(
+    p1: &[f64; 3],
+    p2: &[f64; 3],
+    cyl_origin: &[f64; 3],
+    cyl_axis: &[f64; 3],
+    radius: f64,
+) -> Result<Vec<[f64; 3]>> {
+    let axis = normalize(cyl_axis);
+    let line_dir = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+    let line_len_sq = dot(&line_dir, &line_dir);
+    
+    if line_len_sq < TOLERANCE * TOLERANCE {
+        return Err(CascadeError::InvalidGeometry("Line segment too short".to_string()));
+    }
+    
+    let f = [p1[0] - cyl_origin[0], p1[1] - cyl_origin[1], p1[2] - cyl_origin[2]];
+    
+    let f_parallel = dot(&f, &axis);
+    let f_perp = [
+        f[0] - f_parallel * axis[0],
+        f[1] - f_parallel * axis[1],
+        f[2] - f_parallel * axis[2],
+    ];
+    
+    let line_parallel = dot(&line_dir, &axis);
+    let line_perp = [
+        line_dir[0] - line_parallel * axis[0],
+        line_dir[1] - line_parallel * axis[1],
+        line_dir[2] - line_parallel * axis[2],
+    ];
+    
+    let a = dot(&line_perp, &line_perp);
+    let b = 2.0 * dot(&f_perp, &line_perp);
+    let c = dot(&f_perp, &f_perp) - radius * radius;
+    
+    let discriminant = b * b - 4.0 * a * c;
+    
+    if discriminant < -TOLERANCE {
+        return Ok(vec![]);
+    }
+    
+    let mut results = vec![];
+    let mut t_params = vec![];
+    
+    if discriminant.abs() < TOLERANCE {
+        let t = -b / (2.0 * a);
+        if t >= -TOLERANCE && t <= 1.0 + TOLERANCE {
+            t_params.push(t.max(0.0).min(1.0));
+        }
+    } else {
+        let sqrt_disc = discriminant.sqrt();
+        let t1 = (-b - sqrt_disc) / (2.0 * a);
+        let t2 = (-b + sqrt_disc) / (2.0 * a);
+        
+        for t in &[t1, t2] {
+            if *t >= -TOLERANCE && *t <= 1.0 + TOLERANCE {
+                t_params.push(t.max(0.0).min(1.0));
+            }
+        }
+    }
+    
+    for t in t_params {
+        let intersection = [
+            p1[0] + t * line_dir[0],
+            p1[1] + t * line_dir[1],
+            p1[2] + t * line_dir[2],
+        ];
+        results.push(intersection);
+    }
+    
+    Ok(results)
+}
+
+fn line_cone_intersection(
+    p1: &[f64; 3],
+    p2: &[f64; 3],
+    cone_origin: &[f64; 3],
+    cone_axis: &[f64; 3],
+    half_angle: f64,
+) -> Result<Vec<[f64; 3]>> {
+    let axis = normalize(cone_axis);
+    let line_dir = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+    let line_len_sq = dot(&line_dir, &line_dir);
+    
+    if line_len_sq < TOLERANCE * TOLERANCE {
+        return Err(CascadeError::InvalidGeometry("Line segment too short".to_string()));
+    }
+    
+    let cos_angle = half_angle.cos();
+    let sin_angle = half_angle.sin();
+    let cos_sq = cos_angle * cos_angle;
+    let sin_sq = sin_angle * sin_angle;
+    
+    let f = [p1[0] - cone_origin[0], p1[1] - cone_origin[1], p1[2] - cone_origin[2]];
+    
+    let f_parallel = dot(&f, &axis);
+    let f_perp_sq = dot(&f, &f) - f_parallel * f_parallel;
+    
+    let line_parallel = dot(&line_dir, &axis);
+    let line_perp_sq = line_len_sq - line_parallel * line_parallel;
+    
+    let a = line_parallel * line_parallel * cos_sq - line_perp_sq * sin_sq;
+    let b = 2.0 * (f_parallel * line_parallel * cos_sq - dot(&f, &line_dir) * sin_sq + line_perp_sq * sin_sq);
+    let c = f_parallel * f_parallel * cos_sq - f_perp_sq * sin_sq;
+    
+    if a.abs() < TOLERANCE {
+        if b.abs() < TOLERANCE {
+            return Ok(vec![]);
+        }
+        let t = -c / b;
+        if t >= -TOLERANCE && t <= 1.0 + TOLERANCE {
+            let t = t.max(0.0).min(1.0);
+            let intersection = [
+                p1[0] + t * line_dir[0],
+                p1[1] + t * line_dir[1],
+                p1[2] + t * line_dir[2],
+            ];
+            return Ok(vec![intersection]);
+        }
+        return Ok(vec![]);
+    }
+    
+    let discriminant = b * b - 4.0 * a * c;
+    
+    if discriminant < -TOLERANCE {
+        return Ok(vec![]);
+    }
+    
+    let mut results = vec![];
+    let mut t_params = vec![];
+    
+    if discriminant.abs() < TOLERANCE {
+        let t = -b / (2.0 * a);
+        if t >= -TOLERANCE && t <= 1.0 + TOLERANCE {
+            t_params.push(t.max(0.0).min(1.0));
+        }
+    } else {
+        let sqrt_disc = discriminant.sqrt();
+        let t1 = (-b - sqrt_disc) / (2.0 * a);
+        let t2 = (-b + sqrt_disc) / (2.0 * a);
+        
+        for t in &[t1, t2] {
+            if *t >= -TOLERANCE && *t <= 1.0 + TOLERANCE {
+                t_params.push(t.max(0.0).min(1.0));
+            }
+        }
+    }
+    
+    for t in t_params {
+        let intersection = [
+            p1[0] + t * line_dir[0],
+            p1[1] + t * line_dir[1],
+            p1[2] + t * line_dir[2],
+        ];
+        results.push(intersection);
+    }
+    
+    Ok(results)
+}
+
+fn numerical_curve_surface_intersection(
+    _curve: &CurveType,
+    start: &[f64; 3],
+    end: &[f64; 3],
+    surface: &SurfaceType,
+    _u_min: f64,
+    _u_max: f64,
+) -> Result<Vec<[f64; 3]>> {
+    let mut results = vec![];
+    const MARCH_STEPS: usize = 20;
+    
+    for step in 0..=MARCH_STEPS {
+        let t = step as f64 / MARCH_STEPS as f64;
+        let point = [
+            start[0] * (1.0 - t) + end[0] * t,
+            start[1] * (1.0 - t) + end[1] * t,
+            start[2] * (1.0 - t) + end[2] * t,
+        ];
+        
+        if is_point_on_surface(point, surface)? {
+            if results.is_empty() || distance(&results[results.len() - 1], &point) > TOLERANCE * 10.0 {
+                results.push(point);
+            }
+        }
+    }
+    
+    Ok(results)
+}
+
+fn is_point_on_surface(point: [f64; 3], surface: &SurfaceType) -> Result<bool> {
+    match surface {
+        SurfaceType::Plane { origin, normal } => {
+            let normal = normalize(normal);
+            let v = [point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]];
+            let dist = (dot(&v, &normal)).abs();
+            Ok(dist < TOLERANCE * 10.0)
+        }
+        SurfaceType::Cylinder { origin, axis, radius } => {
+            let axis = normalize(axis);
+            let v = [point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]];
+            let parallel = dot(&v, &axis);
+            let perp = [
+                v[0] - parallel * axis[0],
+                v[1] - parallel * axis[1],
+                v[2] - parallel * axis[2],
+            ];
+            let dist = magnitude(&perp);
+            Ok((dist - radius).abs() < TOLERANCE * 10.0)
+        }
+        SurfaceType::Sphere { center, radius } => {
+            let v = [point[0] - center[0], point[1] - center[1], point[2] - center[2]];
+            let dist = magnitude(&v);
+            Ok((dist - radius).abs() < TOLERANCE * 10.0)
+        }
+        SurfaceType::Cone { origin, axis, half_angle_rad } => {
+            let axis = normalize(axis);
+            let v = [point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]];
+            let parallel = dot(&v, &axis);
+            let perp_sq = dot(&v, &v) - parallel * parallel;
+            let expected_radius = parallel.abs() * half_angle_rad.tan();
+            let actual_radius = perp_sq.sqrt();
+            Ok((actual_radius - expected_radius).abs() < TOLERANCE * 10.0)
+        }
+        SurfaceType::Torus { center, major_radius, minor_radius } => {
+            let v = [point[0] - center[0], point[1] - center[1], point[2] - center[2]];
+            let dist_from_center = (v[0] * v[0] + v[1] * v[1]).sqrt();
+            let dist_from_major = (dist_from_center - major_radius).abs();
+            let dist_from_axis = v[2].abs();
+            let dist_to_surface = ((dist_from_major * dist_from_major + dist_from_axis * dist_from_axis).sqrt() - minor_radius).abs();
+            Ok(dist_to_surface < TOLERANCE * 10.0)
+        }
+        _ => {
+            Ok(false)
+        }
+    }
+}
+
 /// Plane-plane intersection: returns a line (or empty if parallel/coincident)
 fn plane_plane_intersection(
     o1: &[f64; 3],

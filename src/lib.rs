@@ -45,6 +45,7 @@ pub use offset::{thick_solid, make_shell};
 pub use local::{split_face, split_edge, split_edge_at_point, remove_face};
 pub use approx::approximate_curve;
 pub use query::{project_point_to_curve, bounding_box, mass_properties, MassProperties};
+// pub use query::{extrema_curve_curve, extrema_point_solid}; // TODO: implement these functions
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;
