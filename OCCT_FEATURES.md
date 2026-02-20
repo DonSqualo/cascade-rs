@@ -140,7 +140,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ### 3.11 Geometric Algorithms
 - [x] Curve-curve intersection (2D)
-- [ ] Curve-surface intersection
+- [x] Curve-surface intersection - `intersect_curve_surface(curve: &CurveType, start: [f64;3], end: [f64;3], surface: &SurfaceType) -> Result<Vec<[f64;3]>>` - Analytical line-plane, line-sphere, line-cylinder, line-cone intersections; numerical marching for complex curves
 - [x] Surface-surface intersection (plane-plane, plane-cylinder, cylinder-cylinder)
 - [x] Point projection to curve - `project_point_to_curve(point: [f64;3], curve: &CurveType, start: [f64;3], end: [f64;3]) -> Result<(f64, [f64;3])>` - Handles line, arc, bezier, bspline, parabola, hyperbola, ellipse, trimmed, and offset curves
 - [ ] Point projection to surface
