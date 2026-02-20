@@ -146,7 +146,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Point projection to surface
 - [ ] Curve projection to surface
 - [ ] Extrema (distance) calculation
-- [ ] Curve approximation
+- [x] Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector
 - [ ] Surface approximation
 - [ ] Curve interpolation
 - [ ] Surface interpolation
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 94 features  
-**Remaining:** 72 features  
+**Implemented:** 95 features  
+**Remaining:** 71 features  
 **Total:** 166 features  
-**Completion:** 56.6%
+**Completion:** 57.2%
 
 **Priority Order:**
 1. Curve-surface intersection (for boolean operations)
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-12 - Implemented Point projection to curve - `project_point_to_curve(point: [f64;3], curve: &CurveType, start: [f64;3], end: [f64;3]) -> Result<(f64, [f64;3])>` - Returns (parameter, closest_point) on curve, supports all curve types with numerical methods for complex curves*
+*Last updated: 2026-03-12 - Implemented Curve approximation - `approximate_curve(points: &[[f64;3]], degree: usize, tolerance: f64) -> Result<CurveType>` - Least squares BSpline fitting with uniform knot vector, automatically controls control point count based on tolerance*

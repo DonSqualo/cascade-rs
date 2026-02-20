@@ -876,6 +876,13 @@ mod tests {
         let dy = p1[1] - p2[1];
         (dx * dx + dy * dy).sqrt() < tol
     }
+    
+    fn pt_eq_3d(p1: [f64; 3], p2: [f64; 3], tol: f64) -> bool {
+        let dx = p1[0] - p2[0];
+        let dy = p1[1] - p2[1];
+        let dz = p1[2] - p2[2];
+        (dx * dx + dy * dy + dz * dz).sqrt() < tol
+    }
 
     #[test]
     fn test_curve2d_line_creation() {
@@ -919,5 +926,142 @@ mod tests {
             assert!((d1 - 1.0).abs() < TEST_TOL);
             assert!((d2 - 1.0).abs() < TEST_TOL);
         }
+    }
+    
+    #[test]
+    fn test_line_plane_intersection() {
+        // Test line piercing a plane
+        let line_start = [0.0, 0.0, -1.0];
+        let line_end = [0.0, 0.0, 1.0];
+        let plane_origin = [0.0, 0.0, 0.0];
+        let plane_normal = [0.0, 0.0, 1.0];
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Plane { origin: plane_origin, normal: plane_normal },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 1);
+        assert!(pt_eq_3d(result[0], [0.0, 0.0, 0.0], 1e-6));
+    }
+    
+    #[test]
+    fn test_line_plane_parallel_no_intersection() {
+        // Test line parallel to plane
+        let line_start = [0.0, 0.0, 1.0];
+        let line_end = [1.0, 0.0, 1.0];
+        let plane_origin = [0.0, 0.0, 0.0];
+        let plane_normal = [0.0, 0.0, 1.0];
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Plane { origin: plane_origin, normal: plane_normal },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 0);
+    }
+    
+    #[test]
+    fn test_line_sphere_intersection() {
+        // Test line piercing a sphere
+        let line_start = [0.0, 0.0, -2.0];
+        let line_end = [0.0, 0.0, 2.0];
+        let sphere_center = [0.0, 0.0, 0.0];
+        let sphere_radius = 1.0;
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Sphere { center: sphere_center, radius: sphere_radius },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 2);
+        // Should intersect at approximately [0, 0, -1] and [0, 0, 1]
+        assert!(pt_eq_3d(result[0], [0.0, 0.0, -1.0], 1e-6));
+        assert!(pt_eq_3d(result[1], [0.0, 0.0, 1.0], 1e-6));
+    }
+    
+    #[test]
+    fn test_line_sphere_tangent() {
+        // Test line tangent to sphere
+        let line_start = [-2.0, 1.0, 0.0];
+        let line_end = [2.0, 1.0, 0.0];
+        let sphere_center = [0.0, 0.0, 0.0];
+        let sphere_radius = 1.0;
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Sphere { center: sphere_center, radius: sphere_radius },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 1);
+        // Should be tangent at approximately [0, 1, 0]
+        assert!(pt_eq_3d(result[0], [0.0, 1.0, 0.0], 1e-6));
+    }
+    
+    #[test]
+    fn test_line_sphere_no_intersection() {
+        // Test line missing sphere
+        let line_start = [-2.0, 2.0, 0.0];
+        let line_end = [2.0, 2.0, 0.0];
+        let sphere_center = [0.0, 0.0, 0.0];
+        let sphere_radius = 1.0;
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Sphere { center: sphere_center, radius: sphere_radius },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 0);
+    }
+    
+    #[test]
+    fn test_line_cylinder_intersection() {
+        // Test line piercing a cylinder
+        let line_start = [-2.0, 0.0, 0.0];
+        let line_end = [2.0, 0.0, 0.0];
+        let cyl_origin = [0.0, 0.0, 0.0];
+        let cyl_axis = [0.0, 0.0, 1.0];
+        let cyl_radius = 1.0;
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Cylinder { origin: cyl_origin, axis: cyl_axis, radius: cyl_radius },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 2);
+        // Should intersect at approximately [-1, 0, 0] and [1, 0, 0]
+        assert!(pt_eq_3d(result[0], [-1.0, 0.0, 0.0], 1e-6));
+        assert!(pt_eq_3d(result[1], [1.0, 0.0, 0.0], 1e-6));
+    }
+    
+    #[test]
+    fn test_line_cylinder_no_intersection() {
+        // Test line missing cylinder
+        let line_start = [-2.0, 2.0, 0.0];
+        let line_end = [2.0, 2.0, 0.0];
+        let cyl_origin = [0.0, 0.0, 0.0];
+        let cyl_axis = [0.0, 0.0, 1.0];
+        let cyl_radius = 1.0;
+        
+        let result = intersect_curve_surface(
+            &CurveType::Line,
+            line_start,
+            line_end,
+            &SurfaceType::Cylinder { origin: cyl_origin, axis: cyl_axis, radius: cyl_radius },
+        ).unwrap();
+        
+        assert_eq!(result.len(), 0);
     }
 }
