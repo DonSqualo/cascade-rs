@@ -22,7 +22,7 @@ impl BndSphere {
     /// Creates an empty sphere
     pub fn new() -> Self {
         BndSphere {
-            center: XYZ::new(0.0, 0.0, 0.0),
+            center: XYZ::from_coords(0.0, 0.0, 0.0),
             radius: 0.0,
             u: 0,
             v: 0,
@@ -119,7 +119,7 @@ impl BndSphere {
         let new_radius = (dist + r1 + r2) / 2.0;
         let alpha = (new_radius - r1) / dist;
         
-        self.center = XYZ::new(
+        self.center = XYZ::from_coords(
             self.center.x() + alpha * dx,
             self.center.y() + alpha * dy,
             self.center.z() + alpha * dz,

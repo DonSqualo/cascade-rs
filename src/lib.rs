@@ -17,7 +17,7 @@ pub mod gp;
 
 /// Bounding box classes (Bnd_Box, Bnd_Sphere, Bnd_Range, etc.).
 /// Port of: src/FoundationClasses/TKMath/Bnd/
-// pub mod bnd; // WIP: Sub-agent code needs API fixes
+pub mod bnd;
 
 // =============================================================================
 // Legacy Modules (to be migrated)

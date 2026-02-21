@@ -68,7 +68,7 @@ impl BndBox2d {
     /// Sets this box to contain only the given point
     pub fn set_point(&mut self, p: Pnt2d) {
         self.set_void();
-        self.update(p.x(), p.y());
+        self.update_point(p.x(), p.y());
     }
 
     /// Updates this box to contain the given interval
@@ -115,7 +115,7 @@ impl BndBox2d {
             self.xmin - self.gap
         };
         let xmax = if self.is_open_xmax() {
-            f64::f64::INFINITY
+            f64::INFINITY
         } else {
             self.xmax + self.gap
         };
@@ -125,7 +125,7 @@ impl BndBox2d {
             self.ymin - self.gap
         };
         let ymax = if self.is_open_ymax() {
-            f64::f64::INFINITY
+            f64::INFINITY
         } else {
             self.ymax + self.gap
         };
@@ -135,13 +135,13 @@ impl BndBox2d {
     /// Returns the minimum corner
     pub fn corner_min(&self) -> XY {
         let (xmin, ymin, _, _) = self.get();
-        XY::new(xmin, ymin)
+        XY::from_coords(xmin, ymin)
     }
 
     /// Returns the maximum corner
     pub fn corner_max(&self) -> XY {
         let (_, _, xmax, ymax) = self.get();
-        XY::new(xmax, ymax)
+        XY::from_coords(xmax, ymax)
     }
 
     /// Returns the center of this box, or None if void
@@ -150,7 +150,7 @@ impl BndBox2d {
             None
         } else {
             let (xmin, ymin, xmax, ymax) = self.get();
-            Some(XY::new((xmin + xmax) / 2.0, (ymin + ymax) / 2.0))
+            Some(XY::from_coords((xmin + xmax) / 2.0, (ymin + ymax) / 2.0))
         }
     }
 
@@ -258,7 +258,7 @@ impl BndBox2d {
 
     /// Returns true if a point is inside this box
     pub fn contains(&self, p: Pnt2d) -> bool {
-        !self.is_out_point(XY::new(p.x(), p.y()))
+        !self.is_out_point(XY::from_coords(p.x(), p.y()))
     }
 
     /// Returns true if another box intersects this box

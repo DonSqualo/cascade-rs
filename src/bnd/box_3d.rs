@@ -444,7 +444,7 @@ impl BndBox {
         
         let mut result = BndBox::new();
         for corner in &corners {
-            result.add_point(trsf.transform_point(corner));
+            result.add_point(corner.transformed(trsf));
         }
         
         if self.is_open() {
@@ -484,12 +484,12 @@ mod tests {
         let b = BndBox::from_points(p_min, p_max);
         assert!(!b.is_void());
         let (xmin, ymin, zmin, xmax, ymax, zmax) = b.get();
-        assert!((xmin - 1.0).abs() < PRECISION_CONFUSION);
-        assert!((ymin - 2.0).abs() < PRECISION_CONFUSION);
-        assert!((zmin - 3.0).abs() < PRECISION_CONFUSION);
-        assert!((xmax - 4.0).abs() < PRECISION_CONFUSION);
-        assert!((ymax - 5.0).abs() < PRECISION_CONFUSION);
-        assert!((zmax - 6.0).abs() < PRECISION_CONFUSION);
+        assert!((xmin - 1.0).abs() < crate::bnd::PRECISION_CONFUSION);
+        assert!((ymin - 2.0).abs() < crate::bnd::PRECISION_CONFUSION);
+        assert!((zmin - 3.0).abs() < crate::bnd::PRECISION_CONFUSION);
+        assert!((xmax - 4.0).abs() < crate::bnd::PRECISION_CONFUSION);
+        assert!((ymax - 5.0).abs() < crate::bnd::PRECISION_CONFUSION);
+        assert!((zmax - 6.0).abs() < crate::bnd::PRECISION_CONFUSION);
     }
 
     #[test]

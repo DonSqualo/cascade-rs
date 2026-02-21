@@ -10,11 +10,11 @@ pub struct BndB2d {
 }
 
 impl BndB2d {
-    /// Creates an empty bounding box
+    /// Creates an empty (void) bounding box
     pub fn new() -> Self {
         BndB2d {
             center: [0.0, 0.0],
-            h_size: [0.0, 0.0],
+            h_size: [-1.0, -1.0], // Negative = void
         }
     }
 
@@ -59,7 +59,7 @@ impl BndB2d {
 
     /// Adds a Pnt2d
     pub fn add_pnt2d(&mut self, p: Pnt2d) {
-        self.add_point(XY::new(p.x(), p.y()));
+        self.add_point(XY::from_coords(p.x(), p.y()));
     }
 
     /// Adds another bounding box
@@ -95,12 +95,12 @@ impl BndB2d {
 
     /// Returns the minimum corner
     pub fn corner_min(&self) -> XY {
-        XY::new(self.center[0] - self.h_size[0], self.center[1] - self.h_size[1])
+        XY::from_coords(self.center[0] - self.h_size[0], self.center[1] - self.h_size[1])
     }
 
     /// Returns the maximum corner
     pub fn corner_max(&self) -> XY {
-        XY::new(self.center[0] + self.h_size[0], self.center[1] + self.h_size[1])
+        XY::from_coords(self.center[0] + self.h_size[0], self.center[1] + self.h_size[1])
     }
 
     /// Returns the square extent
@@ -209,11 +209,11 @@ pub struct BndB3d {
 }
 
 impl BndB3d {
-    /// Creates an empty bounding box
+    /// Creates an empty (void) bounding box
     pub fn new() -> Self {
         BndB3d {
             center: [0.0, 0.0, 0.0],
-            h_size: [0.0, 0.0, 0.0],
+            h_size: [-1.0, -1.0, -1.0], // Negative = void
         }
     }
 
@@ -259,7 +259,7 @@ impl BndB3d {
 
     /// Adds a Pnt
     pub fn add_pnt(&mut self, p: Pnt) {
-        self.add_point(p.xyz());
+        self.add_point(*p.xyz());
     }
 
     /// Adds another bounding box
@@ -303,7 +303,7 @@ impl BndB3d {
 
     /// Returns the minimum corner
     pub fn corner_min(&self) -> XYZ {
-        XYZ::new(
+        XYZ::from_coords(
             self.center[0] - self.h_size[0],
             self.center[1] - self.h_size[1],
             self.center[2] - self.h_size[2],
@@ -312,7 +312,7 @@ impl BndB3d {
 
     /// Returns the maximum corner
     pub fn corner_max(&self) -> XYZ {
-        XYZ::new(
+        XYZ::from_coords(
             self.center[0] + self.h_size[0],
             self.center[1] + self.h_size[1],
             self.center[2] + self.h_size[2],
