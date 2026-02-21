@@ -613,6 +613,68 @@ pub fn export_stl(mesh: &TriangleMesh, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Export mesh to STL format (binary)
+///
+/// Binary STL format:
+/// - 80-byte header (arbitrary text, we use "cascade-rs binary STL")
+/// - 4-byte little-endian u32: number of triangles
+/// - For each triangle (50 bytes):
+///   - Normal: 3 × f32 little-endian (12 bytes)
+///   - Vertex 1: 3 × f32 little-endian (12 bytes)
+///   - Vertex 2: 3 × f32 little-endian (12 bytes)
+///   - Vertex 3: 3 × f32 little-endian (12 bytes)
+///   - Attribute byte count: u16 little-endian (2 bytes, usually 0)
+pub fn write_stl_binary(mesh: &TriangleMesh, path: &str) -> Result<()> {
+    let mut file = File::create(path)?;
+    
+    // Write 80-byte header
+    let header = b"cascade-rs binary STL export";
+    let mut header_buf = [0u8; 80];
+    let copy_len = header.len().min(80);
+    header_buf[..copy_len].copy_from_slice(&header[..copy_len]);
+    file.write_all(&header_buf)?;
+    
+    // Write triangle count (4 bytes, little-endian u32)
+    let triangle_count = mesh.triangles.len() as u32;
+    file.write_all(&triangle_count.to_le_bytes())?;
+    
+    // Write each triangle (50 bytes each)
+    for triangle in &mesh.triangles {
+        let [i0, i1, i2] = triangle;
+        let v0 = mesh.vertices[*i0];
+        let v1 = mesh.vertices[*i1];
+        let v2 = mesh.vertices[*i2];
+        
+        // Calculate normal from vertices
+        let normal = calculate_triangle_normal(&v0, &v1, &v2);
+        
+        // Write normal (3 × f32)
+        file.write_all(&(normal[0] as f32).to_le_bytes())?;
+        file.write_all(&(normal[1] as f32).to_le_bytes())?;
+        file.write_all(&(normal[2] as f32).to_le_bytes())?;
+        
+        // Write vertex 1 (3 × f32)
+        file.write_all(&(v0[0] as f32).to_le_bytes())?;
+        file.write_all(&(v0[1] as f32).to_le_bytes())?;
+        file.write_all(&(v0[2] as f32).to_le_bytes())?;
+        
+        // Write vertex 2 (3 × f32)
+        file.write_all(&(v1[0] as f32).to_le_bytes())?;
+        file.write_all(&(v1[1] as f32).to_le_bytes())?;
+        file.write_all(&(v1[2] as f32).to_le_bytes())?;
+        
+        // Write vertex 3 (3 × f32)
+        file.write_all(&(v2[0] as f32).to_le_bytes())?;
+        file.write_all(&(v2[1] as f32).to_le_bytes())?;
+        file.write_all(&(v2[2] as f32).to_le_bytes())?;
+        
+        // Write attribute byte count (u16, typically 0)
+        file.write_all(&0u16.to_le_bytes())?;
+    }
+    
+    Ok(())
+}
+
 // ===== Helper Functions =====
 
 /// Normalize a 3D vector

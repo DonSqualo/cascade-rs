@@ -969,6 +969,330 @@ fn rotate_point_around_axis(
     ]
 }
 
+/// Options for evolved (complex sweep) operation
+#[derive(Debug, Clone)]
+pub struct EvolveOptions {
+    /// Whether to apply scaling along the spine
+    pub scale_enabled: bool,
+    /// Scaling function: takes parameter [0..1] along spine, returns scale factor
+    pub scale_function: Option<fn(f64) -> f64>,
+    
+    /// Whether to apply rotation along the spine
+    pub rotation_enabled: bool,
+    /// Rotation angles in radians: takes parameter [0..1], returns angle
+    pub rotation_function: Option<fn(f64) -> f64>,
+    
+    /// Axis of rotation (used if rotation_enabled)
+    pub rotation_axis: [f64; 3],
+    
+    /// Whether to keep the profile perpendicular to the spine
+    pub keep_contact: bool,
+    
+    /// Number of samples along the spine (higher = smoother but more faces)
+    pub num_samples: usize,
+}
+
+impl Default for EvolveOptions {
+    fn default() -> Self {
+        Self {
+            scale_enabled: false,
+            scale_function: None,
+            rotation_enabled: false,
+            rotation_function: None,
+            rotation_axis: [0.0, 0.0, 1.0],
+            keep_contact: true,
+            num_samples: 20,
+        }
+    }
+}
+
+/// Evolved (complex sweep) - sweeps a profile along a spine with optional scaling and rotation
+///
+/// The Evolved operation is a generalized sweep where:
+/// - The profile can change size (scale) along the spine
+/// - The profile can rotate along the spine
+/// - The profile is continuously positioned and oriented along the spine path
+/// - This creates shapes like tapered tubes, twisted solids, morphing geometry
+///
+/// # Arguments
+/// * `profile` - A 2D wire (closed curve) to sweep, perpendicular to initial spine direction
+/// * `spine` - A 3D wire (path) along which to sweep the profile
+/// * `options` - EvolveOptions controlling scaling, rotation, sampling
+///
+/// # Returns
+/// A Solid representing the evolved shape
+///
+/// # Algorithm
+/// 1. Sample the spine at regular intervals
+/// 2. At each sample point:
+///    a. Compute the Frenet frame (T, N, B) - tangent, normal, binormal
+///    b. Apply scaling if enabled
+///    c. Apply rotation if enabled
+///    d. Transform and position the profile at this frame
+/// 3. Create side faces connecting consecutive profiles
+/// 4. Add end caps (start and end profiles)
+/// 5. Create a Shell and Solid from the faces
+///
+/// # Examples
+/// ```ignore
+/// // Simple tapered tube: profile scales from 1.0 to 0.5 along spine
+/// let mut options = EvolveOptions::default();
+/// options.scale_enabled = true;
+/// options.scale_function = Some(|t| 1.0 - 0.5 * t);
+/// let tapered = evolved(&profile_wire, &spine_wire, &options)?;
+///
+/// // Twisted extrusion: profile rotates 360° along spine
+/// let mut options = EvolveOptions::default();
+/// options.rotation_enabled = true;
+/// options.rotation_function = Some(|t| t * 2.0 * std::f64::consts::PI);
+/// let twisted = evolved(&profile_wire, &spine_wire, &options)?;
+/// ```
+pub fn evolved(profile: &Wire, spine: &Wire, options: &EvolveOptions) -> Result<Solid> {
+    if spine.edges.is_empty() {
+        return Err(CascadeError::InvalidGeometry(
+            "Spine wire must have at least one edge".into()
+        ));
+    }
+    
+    if profile.edges.is_empty() {
+        return Err(CascadeError::InvalidGeometry(
+            "Profile wire must have at least one edge".into()
+        ));
+    }
+    
+    let num_samples = options.num_samples.max(3);
+    
+    // Collect spine points by sampling each edge
+    let mut spine_points = vec![];
+    for edge in &spine.edges {
+        let start_point = edge.start.point;
+        let end_point = edge.end.point;
+        
+        // Sample along this edge
+        for i in 0..=num_samples {
+            let t = i as f64 / num_samples as f64;
+            let point = [
+                start_point[0] + t * (end_point[0] - start_point[0]),
+                start_point[1] + t * (end_point[1] - start_point[1]),
+                start_point[2] + t * (end_point[2] - start_point[2]),
+            ];
+            if spine_points.is_empty() || distance(&spine_points[spine_points.len() - 1], &point) > 1e-6 {
+                spine_points.push(point);
+            }
+        }
+    }
+    
+    if spine_points.len() < 2 {
+        return Err(CascadeError::InvalidGeometry(
+            "Spine must have at least 2 distinct points".into()
+        ));
+    }
+    
+    // Create profiles at each spine point
+    let mut profiles = vec![];
+    
+    for i in 0..spine_points.len() {
+        let t = if spine_points.len() > 1 {
+            i as f64 / (spine_points.len() - 1) as f64
+        } else {
+            0.0
+        };
+        
+        // Compute Frenet frame at this point
+        let tangent = if i < spine_points.len() - 1 {
+            normalize(&[
+                spine_points[i + 1][0] - spine_points[i][0],
+                spine_points[i + 1][1] - spine_points[i][1],
+                spine_points[i + 1][2] - spine_points[i][2],
+            ])
+        } else {
+            normalize(&[
+                spine_points[i][0] - spine_points[i - 1][0],
+                spine_points[i][1] - spine_points[i - 1][1],
+                spine_points[i][2] - spine_points[i - 1][2],
+            ])
+        };
+        
+        // Create normal and binormal
+        let normal = if tangent[2].abs() < 0.9 {
+            normalize(&cross(&tangent, &[0.0, 0.0, 1.0]))
+        } else {
+            normalize(&cross(&tangent, &[1.0, 0.0, 0.0]))
+        };
+        
+        let binormal = cross(&tangent, &normal);
+        
+        // Apply scaling
+        let scale = if options.scale_enabled {
+            options.scale_function.map(|f| f(t)).unwrap_or(1.0)
+        } else {
+            1.0
+        };
+        
+        // Create scaled and possibly rotated profile at this spine point
+        let mut profile_at_point = vec![];
+        
+        for edge in &profile.edges {
+            // Project profile point onto local frame
+            let p = edge.start.point;
+            
+            // Transform profile point from local to global coordinates
+            // Profile is assumed to be in the XY plane, with Z along spine initially
+            let local_x = p[0] * scale;
+            let local_y = p[1] * scale;
+            
+            // Apply rotation if enabled
+            let (rotated_x, rotated_y) = if options.rotation_enabled {
+                let angle = options.rotation_function.map(|f| f(t)).unwrap_or(0.0);
+                let cos_a = angle.cos();
+                let sin_a = angle.sin();
+                (local_x * cos_a - local_y * sin_a, local_x * sin_a + local_y * cos_a)
+            } else {
+                (local_x, local_y)
+            };
+            
+            // Transform to world coordinates using the Frenet frame
+            let global_point = [
+                spine_points[i][0] + rotated_x * normal[0] + rotated_y * binormal[0],
+                spine_points[i][1] + rotated_x * normal[1] + rotated_y * binormal[1],
+                spine_points[i][2] + rotated_x * normal[2] + rotated_y * binormal[2],
+            ];
+            
+            profile_at_point.push(Vertex::new(global_point[0], global_point[1], global_point[2]));
+        }
+        
+        profiles.push(profile_at_point);
+    }
+    
+    // Create side faces connecting consecutive profiles
+    let mut faces = vec![];
+    
+    // End cap: first profile
+    if !profiles[0].is_empty() {
+        let cap_edges: Vec<Edge> = (0..profiles[0].len())
+            .map(|i| {
+                let next_i = (i + 1) % profiles[0].len();
+                Edge {
+                    start: profiles[0][i].clone(),
+                    end: profiles[0][next_i].clone(),
+                    curve_type: CurveType::Line,
+                }
+            })
+            .collect();
+        
+        let cap_wire = Wire {
+            edges: cap_edges,
+            closed: true,
+        };
+        
+        let cap_face = Face {
+            outer_wire: cap_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: profiles[0][0].point,
+                normal: [0.0, 0.0, 1.0], // Dummy normal, will be computed properly
+            },
+        };
+        
+        faces.push(cap_face);
+    }
+    
+    // Side faces connecting consecutive profiles
+    for i in 0..profiles.len() - 1 {
+        let curr_profile = &profiles[i];
+        let next_profile = &profiles[i + 1];
+        
+        if curr_profile.len() != next_profile.len() {
+            continue; // Skip mismatched profiles
+        }
+        
+        for j in 0..curr_profile.len() {
+            let next_j = (j + 1) % curr_profile.len();
+            
+            // Create quad face: v0-v1-v3-v2
+            let v0 = curr_profile[j].clone();
+            let v1 = curr_profile[next_j].clone();
+            let v2 = next_profile[j].clone();
+            let v3 = next_profile[next_j].clone();
+            
+            let edges = vec![
+                Edge { start: v0.clone(), end: v1.clone(), curve_type: CurveType::Line },
+                Edge { start: v1.clone(), end: v3.clone(), curve_type: CurveType::Line },
+                Edge { start: v3.clone(), end: v2.clone(), curve_type: CurveType::Line },
+                Edge { start: v2.clone(), end: v0.clone(), curve_type: CurveType::Line },
+            ];
+            
+            let wire = Wire {
+                edges,
+                closed: true,
+            };
+            
+            let normal = compute_quad_normal(&v0.point, &v1.point, &v3.point, &v2.point);
+            
+            let face = Face {
+                outer_wire: wire,
+                inner_wires: vec![],
+                surface_type: SurfaceType::Plane {
+                    origin: v0.point,
+                    normal,
+                },
+            };
+            
+            faces.push(face);
+        }
+    }
+    
+    // End cap: last profile
+    if !profiles.last().unwrap().is_empty() {
+        let last = profiles.len() - 1;
+        let cap_edges: Vec<Edge> = (0..profiles[last].len())
+            .map(|i| {
+                let prev_i = if i == 0 { profiles[last].len() - 1 } else { i - 1 };
+                Edge {
+                    start: profiles[last][i].clone(),
+                    end: profiles[last][prev_i].clone(),
+                    curve_type: CurveType::Line,
+                }
+            })
+            .collect();
+        
+        let cap_wire = Wire {
+            edges: cap_edges,
+            closed: true,
+        };
+        
+        let cap_face = Face {
+            outer_wire: cap_wire,
+            inner_wires: vec![],
+            surface_type: SurfaceType::Plane {
+                origin: profiles[last][0].point,
+                normal: [0.0, 0.0, 1.0], // Dummy normal
+            },
+        };
+        
+        faces.push(cap_face);
+    }
+    
+    if faces.is_empty() {
+        return Err(CascadeError::InvalidGeometry(
+            "Failed to create evolved solid: no faces generated".into()
+        ));
+    }
+    
+    let shell = Shell { faces, closed: true };
+    Ok(Solid {
+        outer_shell: shell,
+        inner_shells: vec![],
+    })
+}
+
+fn distance(p1: &[f64; 3], p2: &[f64; 3]) -> f64 {
+    let dx = p2[0] - p1[0];
+    let dy = p2[1] - p1[1];
+    let dz = p2[2] - p1[2];
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1267,5 +1591,209 @@ mod tests {
         assert!(result.is_ok(), "Failed to create 90° revolution solid");
         let solid = result.unwrap();
         assert!(!solid.outer_shell.faces.is_empty(), "Revolved solid should have faces");
+    }
+    
+    #[test]
+    fn test_evolved_basic_straight_path() {
+        // Create a simple circular profile (small square for simplicity)
+        let v1 = Vertex::new(0.5, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 0.0);
+        let v3 = Vertex::new(1.0, 0.5, 0.0);
+        let v4 = Vertex::new(0.5, 0.5, 0.0);
+        
+        let profile_edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let profile = Wire {
+            edges: profile_edges,
+            closed: true,
+        };
+        
+        // Create a straight spine along the Z axis
+        let s1 = Vertex::new(0.0, 0.0, 0.0);
+        let s2 = Vertex::new(0.0, 0.0, 5.0);
+        
+        let spine_edges = vec![
+            Edge {
+                start: s1.clone(),
+                end: s2.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let spine = Wire {
+            edges: spine_edges,
+            closed: false,
+        };
+        
+        // Evolved with default options (no scaling, no rotation)
+        let options = EvolveOptions::default();
+        let result = evolved(&profile, &spine, &options);
+        
+        assert!(result.is_ok(), "Evolved should succeed with straight spine");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Evolved solid should have faces");
+    }
+    
+    #[test]
+    fn test_evolved_with_scaling() {
+        // Create a small square profile
+        let v1 = Vertex::new(0.25, 0.0, 0.0);
+        let v2 = Vertex::new(0.5, 0.0, 0.0);
+        let v3 = Vertex::new(0.5, 0.25, 0.0);
+        let v4 = Vertex::new(0.25, 0.25, 0.0);
+        
+        let profile_edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let profile = Wire {
+            edges: profile_edges,
+            closed: true,
+        };
+        
+        // Create spine
+        let s1 = Vertex::new(0.0, 0.0, 0.0);
+        let s2 = Vertex::new(0.0, 0.0, 3.0);
+        
+        let spine_edges = vec![
+            Edge {
+                start: s1.clone(),
+                end: s2.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let spine = Wire {
+            edges: spine_edges,
+            closed: false,
+        };
+        
+        // Evolved with scaling: taper from 1.0 to 0.5
+        let mut options = EvolveOptions::default();
+        options.scale_enabled = true;
+        options.scale_function = Some(|t| 1.0 - 0.5 * t);
+        
+        let result = evolved(&profile, &spine, &options);
+        
+        assert!(result.is_ok(), "Evolved with scaling should succeed");
+        let solid = result.unwrap();
+        assert!(!solid.outer_shell.faces.is_empty(), "Tapered solid should have faces");
+    }
+    
+    #[test]
+    fn test_evolved_invalid_empty_spine() {
+        let v1 = Vertex::new(0.5, 0.0, 0.0);
+        let v2 = Vertex::new(1.0, 0.0, 0.0);
+        let v3 = Vertex::new(1.0, 0.5, 0.0);
+        let v4 = Vertex::new(0.5, 0.5, 0.0);
+        
+        let profile_edges = vec![
+            Edge {
+                start: v1.clone(),
+                end: v2.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v2.clone(),
+                end: v3.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v3.clone(),
+                end: v4.clone(),
+                curve_type: CurveType::Line,
+            },
+            Edge {
+                start: v4.clone(),
+                end: v1.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let profile = Wire {
+            edges: profile_edges,
+            closed: true,
+        };
+        
+        // Empty spine
+        let spine = Wire {
+            edges: vec![],
+            closed: false,
+        };
+        
+        let options = EvolveOptions::default();
+        let result = evolved(&profile, &spine, &options);
+        
+        assert!(result.is_err(), "Evolved with empty spine should fail");
+    }
+    
+    #[test]
+    fn test_evolved_invalid_empty_profile() {
+        let s1 = Vertex::new(0.0, 0.0, 0.0);
+        let s2 = Vertex::new(0.0, 0.0, 5.0);
+        
+        let spine_edges = vec![
+            Edge {
+                start: s1.clone(),
+                end: s2.clone(),
+                curve_type: CurveType::Line,
+            },
+        ];
+        
+        let spine = Wire {
+            edges: spine_edges,
+            closed: false,
+        };
+        
+        // Empty profile
+        let profile = Wire {
+            edges: vec![],
+            closed: true,
+        };
+        
+        let options = EvolveOptions::default();
+        let result = evolved(&profile, &spine, &options);
+        
+        assert!(result.is_err(), "Evolved with empty profile should fail");
     }
 }

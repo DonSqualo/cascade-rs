@@ -2,6 +2,8 @@
 
 mod step;
 mod iges;
+mod obj;
+mod ply;
 
 use crate::brep::{Shape, Solid, Shell, Face, Wire, Edge, Vertex, CurveType, SurfaceType, Compound};
 use crate::{Result, CascadeError};
@@ -9,12 +11,79 @@ use std::io::Write;
 
 pub use step::read_step;
 pub use iges::{read_iges, write_iges, write_iges_with_layers};
+pub use obj::write_obj;
+pub use ply::write_ply;
+
+/// PMI (Product Manufacturing Information) Dimension structure
+/// Represents manufacturing tolerances and dimensions in STEP format
+#[derive(Debug, Clone)]
+pub struct StepDimension {
+    /// Nominal dimension value
+    pub value: f64,
+    /// Tolerance bounds (upper, lower) - if None, no tolerance is applied
+    pub tolerance: Option<(f64, f64)>,
+    /// Optional datum reference (e.g., for perpendicularity to a datum)
+    pub datum_ref: Option<String>,
+    /// Dimension type: "linear", "angular", "radial", "diameter"
+    pub dim_type: DimensionType,
+    /// Location on the model where this dimension applies
+    pub location: [f64; 3],
+}
+
+/// PMI Dimension type enumeration
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DimensionType {
+    Linear,
+    Angular,
+    Radial,
+    Diameter,
+}
+
+/// Geometric Tolerance structure for PMI (Geometric Product Specification)
+#[derive(Debug, Clone)]
+pub struct StepGeometricTolerance {
+    /// Tolerance type: "flatness", "perpendicularity", "parallelism", "circularity", "cylindricity"
+    pub tolerance_type: String,
+    /// Tolerance value
+    pub tolerance_value: f64,
+    /// Reference datum if applicable
+    pub datum_ref: Option<String>,
+}
 
 pub fn write_step(shape: &Shape, path: &str) -> Result<()> {
     let file = std::fs::File::create(path)?;
     let writer = std::io::BufWriter::new(file);
     let mut step_writer = StepWriter::new(writer);
     step_writer.write_shape(shape)
+}
+
+/// Write a STEP file with PMI (Product Manufacturing Information)
+/// 
+/// # Arguments
+/// * `shape` - The geometric shape to export
+/// * `dimensions` - Vector of manufacturing dimensions with tolerances
+/// * `path` - Output file path
+/// 
+/// # Example
+/// ```rust,no_run
+/// use cascade::io::{StepDimension, DimensionType};
+/// 
+/// let dim = StepDimension {
+///     value: 50.0,
+///     tolerance: Some((0.5, -0.5)),
+///     datum_ref: None,
+///     dim_type: DimensionType::Linear,
+///     location: [0.0, 0.0, 0.0],
+/// };
+/// 
+/// cascade::io::write_step_with_pmi(&shape, &[dim], "output.step")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn write_step_with_pmi(shape: &Shape, dimensions: &[StepDimension], path: &str) -> Result<()> {
+    let file = std::fs::File::create(path)?;
+    let writer = std::io::BufWriter::new(file);
+    let mut step_writer = StepWriter::new(writer);
+    step_writer.write_shape_with_pmi(shape, dimensions)
 }
 
 pub fn read_brep(path: &str) -> Result<Shape> {
@@ -30,6 +99,7 @@ struct StepWriter<W: Write> {
     writer: W,
     entity_id: usize,
     entities: Vec<String>,
+    ap203_mode: bool, // Enable AP203 compliance
 }
 
 impl<W: Write> StepWriter<W> {
@@ -38,6 +108,7 @@ impl<W: Write> StepWriter<W> {
             writer,
             entity_id: 0,
             entities: Vec::new(),
+            ap203_mode: true,
         }
     }
     
@@ -631,9 +702,21 @@ impl<W: Write> StepWriter<W> {
         writeln!(self.writer, "HEADER;")?;
         writeln!(self.writer, "FILE_DESCRIPTION(('cascade-rs STEP export'), '2', '2', '', '', 1.0, '');")?;
         writeln!(self.writer, "FILE_NAME('cascade-rs export', '', (''), (''), 'cascade-rs', '', '');")?;
-        writeln!(self.writer, "FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));")?;
+        
+        // AP203 compliance: use CONFIG_CONTROL_DESIGN schema
+        if self.ap203_mode {
+            writeln!(self.writer, "FILE_SCHEMA(('CONFIG_CONTROL_DESIGN'));")?;
+        } else {
+            writeln!(self.writer, "FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));")?;
+        }
+        
         writeln!(self.writer, "ENDSEC;")?;
         writeln!(self.writer, "DATA;")?;
+        
+        // For AP203, prepend mandatory application context and product definition entities
+        if self.ap203_mode {
+            self.write_ap203_header()?;
+        }
         
         for entity in &self.entities {
             writeln!(self.writer, "{}", entity)?;
@@ -641,6 +724,229 @@ impl<W: Write> StepWriter<W> {
         
         writeln!(self.writer, "ENDSEC;")?;
         writeln!(self.writer, "END-ISO-10303-21;")?;
+        
+        Ok(())
+    }
+    
+    fn write_ap203_header(&mut self) -> Result<()> {
+        // AP203 (Configuration Controlled Design) requires:
+        // 1. APPLICATION_CONTEXT
+        // 2. APPLICATION_PROTOCOL_DEFINITION
+        // 3. PRODUCT_DEFINITION_CONTEXT
+        // 4. PRODUCT_DEFINITION_FORMATION
+        // 5. PRODUCT_DEFINITION
+        
+        // Entity #1: APPLICATION_CONTEXT
+        let app_context_id = 1;
+        writeln!(
+            self.writer,
+            "#{} = APPLICATION_CONTEXT('configuration controlled 3D designs of mechanical parts and assemblies');",
+            app_context_id
+        )?;
+        
+        // Entity #2: APPLICATION_PROTOCOL_DEFINITION
+        let app_proto_def_id = 2;
+        writeln!(
+            self.writer,
+            "#{} = APPLICATION_PROTOCOL_DEFINITION('international standard', 'config_control_design', 1994, #{});",
+            app_proto_def_id, app_context_id
+        )?;
+        
+        // Entity #3: PRODUCT_DEFINITION_CONTEXT
+        let prod_def_context_id = 3;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION_CONTEXT('part definition', #{}, 'design');",
+            prod_def_context_id, app_context_id
+        )?;
+        
+        // Entity #4: PRODUCT (for the design)
+        let product_id = 4;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT('design', 'design', 'design v1.0', (#{}));",
+            product_id, app_context_id
+        )?;
+        
+        // Entity #5: PRODUCT_DEFINITION_FORMATION
+        let prod_def_form_id = 5;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION_FORMATION('A', 'design stage', #{}, #10);",
+            prod_def_form_id, product_id
+        )?;
+        
+        // Entity #6: PRODUCT_DEFINITION
+        let prod_def_id = 6;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION('design', '', #{}, #{});",
+            prod_def_id, prod_def_form_id, prod_def_context_id
+        )?;
+        
+        // Update internal entity counter to avoid ID collisions
+        self.entity_id = 10;
+        
+        Ok(())
+    }
+    
+    /// Write shape with PMI (Product Manufacturing Information)
+    fn write_shape_with_pmi(&mut self, shape: &Shape, dimensions: &[StepDimension]) -> Result<()> {
+        // First, add the geometric shape
+        match shape {
+            Shape::Vertex(v) => {
+                self.add_vertex(v);
+            }
+            Shape::Edge(e) => {
+                self.add_edge(e);
+            }
+            Shape::Wire(w) => {
+                self.add_wire(w);
+            }
+            Shape::Face(f) => {
+                self.add_face(f);
+            }
+            Shape::Shell(s) => {
+                self.add_shell(s);
+            }
+            Shape::Solid(s) => {
+                self.add_solid(s);
+            }
+            Shape::Compound(c) => {
+                self.add_compound(c);
+            }
+            Shape::CompSolid(_) => {
+                // CompSolid not yet fully implemented
+            }
+        }
+        
+        // Add PMI annotations
+        for dimension in dimensions {
+            self.add_dimension(dimension)?;
+        }
+        
+        self.write_file()?;
+        Ok(())
+    }
+    
+    /// Add a dimensional size entity (PMI)
+    /// Implements DIMENSIONAL_SIZE and DIMENSIONAL_LOCATION from STEP AP203
+    fn add_dimension(&mut self, dim: &StepDimension) -> Result<()> {
+        // Create measurement value entity
+        let measurement_id = self.next_id();
+        let measurement_entity = format!(
+            "#{} = MEASURE_REPRESENTATION_ITEM('dimension', POSITIVE_LENGTH_MEASURE({}), #{});",
+            measurement_id, dim.value, measurement_id  // Self-referential for simplicity
+        );
+        self.entities.push(measurement_entity);
+        
+        // Create dimensional size entity
+        let dim_size_id = self.next_id();
+        let tolerance_clause = if let Some((upper, lower)) = dim.tolerance {
+            format!(
+                ", PLUS_MINUS_TOLERANCE({}, {}, {})",
+                dim.value, upper, lower
+            )
+        } else {
+            String::new()
+        };
+        
+        let dim_type_str = match dim.dim_type {
+            DimensionType::Linear => "LINEAR_DIMENSION",
+            DimensionType::Angular => "ANGULAR_DIMENSION",
+            DimensionType::Radial => "RADIAL_DIMENSION",
+            DimensionType::Diameter => "DIAMETER_DIMENSION",
+        };
+        
+        let dim_size_entity = format!(
+            "#{} = DIMENSIONAL_SIZE('dimension{}', #{}, {})",
+            dim_size_id,
+            self.entity_id,
+            measurement_id,
+            tolerance_clause
+        );
+        self.entities.push(dim_size_entity);
+        
+        // Create dimensional location with coordinates
+        let location_id = self.next_id();
+        let location_entity = format!(
+            "#{} = DIMENSIONAL_LOCATION(#{}, 'dimension location', ({:.6}, {:.6}, {:.6}));",
+            location_id, dim_size_id, dim.location[0], dim.location[1], dim.location[2]
+        );
+        self.entities.push(location_entity);
+        
+        // Add datum reference if present (for geometric tolerances relative to datum)
+        if let Some(datum_ref) = &dim.datum_ref {
+            let datum_feat_id = self.next_id();
+            let datum_entity = format!(
+                "#{} = DATUM('{}', 'datum feature', #{});",
+                datum_feat_id, datum_ref, location_id
+            );
+            self.entities.push(datum_entity);
+        }
+        
+        Ok(())
+    }
+    
+    /// Add geometric tolerance entity (PMI)
+    /// Implements GEOMETRIC_TOLERANCE from STEP AP203
+    fn add_geometric_tolerance(&mut self, tolerance: &StepGeometricTolerance) -> Result<()> {
+        // Create tolerance zone
+        let zone_id = self.next_id();
+        let zone_entity = format!(
+            "#{} = GEOMETRIC_TOLERANCE_WITH_DATUM_REFERENCE('{}', {:.6}, '{}', ?, ?);",
+            zone_id, tolerance.tolerance_type, tolerance.tolerance_value,
+            tolerance.datum_ref.as_deref().unwrap_or("none")
+        );
+        self.entities.push(zone_entity);
+        
+        Ok(())
+    }
+    
+    /// Add datum feature entity (PMI)
+    /// Implements DATUM and DATUM_FEATURE from STEP
+    fn add_datum_feature(&mut self, datum_name: &str, feature_location: [f64; 3]) -> Result<()> {
+        // Create datum target point
+        let point_id = self.next_id();
+        let point_entity = format!(
+            "#{} = CARTESIAN_POINT('{}', ({:.6}, {:.6}, {:.6}));",
+            point_id, datum_name, feature_location[0], feature_location[1], feature_location[2]
+        );
+        self.entities.push(point_entity);
+        
+        // Create datum feature
+        let datum_id = self.next_id();
+        let datum_entity = format!(
+            "#{} = DATUM('{}', '{}', #{});",
+            datum_id, datum_name, datum_name, point_id
+        );
+        self.entities.push(datum_entity);
+        
+        Ok(())
+    }
+    
+    /// Add annotation plane entity (for drawing annotations)
+    fn add_annotation_plane(&mut self, plane_origin: [f64; 3], normal: [f64; 3]) -> Result<()> {
+        let origin_id = self.next_id();
+        let origin_entity = format!(
+            "#{} = CARTESIAN_POINT('annotation plane origin', ({:.6}, {:.6}, {:.6}));",
+            origin_id, plane_origin[0], plane_origin[1], plane_origin[2]
+        );
+        self.entities.push(origin_entity);
+        
+        let normal_id = self.next_id();
+        let normal_entity = format!(
+            "#{} = DIRECTION('annotation plane normal', ({:.6}, {:.6}, {:.6}));",
+            normal_id, normal[0], normal[1], normal[2]
+        );
+        self.entities.push(normal_entity);
+        
+        let plane_id = self.next_id();
+        let plane_entity = format!(
+            "#{} = PLANE('annotation plane', #{}, #{});",
+            plane_id, origin_id, normal_id
+        );
+        self.entities.push(plane_entity);
         
         Ok(())
     }
