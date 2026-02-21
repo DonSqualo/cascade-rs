@@ -62,13 +62,13 @@ impl Circ {
     /// Returns the X axis of the circle.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
     }
 
     /// Returns the Y axis of the circle.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
     }
 
     /// Sets the main axis (normal direction).
@@ -119,8 +119,8 @@ impl Circ {
     #[inline]
     pub fn square_distance(&self, p: &Pnt) -> f64 {
         let v = Vec3::from_points(&self.location(), p);
-        let x = v.dot(&self.posxdirection().to_vec());
-        let y = v.dot(&self.posydirection().to_vec());
+        let x = v.dot(&self.pos.xdirection().to_vec());
+        let y = v.dot(&self.pos.ydirection().to_vec());
         let z = v.dot(&self.pos.direction().to_vec());
         let t = (x * x + y * y).sqrt() - self.radius;
         t * t + z * z

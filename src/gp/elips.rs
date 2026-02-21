@@ -113,7 +113,7 @@ impl Elips {
         let c = (self.major_radius * self.major_radius - self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.posxdirection();
+        let xdir = self.pos.xdirection();
         Pnt::from_coords(
             loc.x() + c * xdir.x(),
             loc.y() + c * xdir.y(),
@@ -126,7 +126,7 @@ impl Elips {
         let c = (self.major_radius * self.major_radius - self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.posxdirection();
+        let xdir = self.pos.xdirection();
         Pnt::from_coords(
             loc.x() - c * xdir.x(),
             loc.y() - c * xdir.y(),
@@ -146,13 +146,13 @@ impl Elips {
     /// Returns the X axis (major axis).
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
     }
 
     /// Returns the Y axis (minor axis).
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
     }
 
     /// Rotate the ellipse.

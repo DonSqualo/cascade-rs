@@ -29,20 +29,20 @@ mod cone;
 mod sphere;
 mod torus;
 
-// 2D types (in progress)
+// 2D types
 mod xy;
 mod pnt2d;
 mod vec2d;
 mod dir2d;
 mod mat2d;
-// mod trsf2d;    // TODO
-// mod ax2d;      // TODO
-// mod ax22d;     // TODO
-// mod lin2d;     // TODO
-// mod circ2d;    // TODO
-// mod elips2d;   // TODO
-// mod hypr2d;    // TODO
-// mod parab2d;   // TODO
+mod trsf2d;
+mod ax2d;
+mod ax22d;
+mod lin2d;
+mod circ2d;
+mod elips2d;
+mod hypr2d;
+mod parab2d;
 
 // Re-export all types at module level (matching OCCT's flat namespace)
 pub use xyz::XYZ;
@@ -74,6 +74,11 @@ pub use pnt2d::Pnt2d;
 pub use vec2d::Vec2d;
 pub use dir2d::Dir2d;
 pub use mat2d::Mat2d;
-
-// 2D aliases/types
-pub type Ax2d = Ax2;  // 2D coordinate system
+pub use trsf2d::Trsf2d;
+pub use ax2d::Ax2d;
+pub use ax22d::Ax22d;
+pub use lin2d::Lin2d;
+pub use circ2d::Circ2d;
+pub use elips2d::Elips2d;
+pub use hypr2d::Hypr2d;
+pub use parab2d::Parab2d;

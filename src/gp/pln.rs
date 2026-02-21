@@ -141,13 +141,13 @@ impl Pln {
     /// Returns the X axis of the plane.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
     }
 
     /// Returns the Y axis of the plane.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
     }
 
     /// Computes the distance from the plane to a point.
@@ -512,9 +512,9 @@ mod tests {
     #[test]
     fn test_pln_u_reverse() {
         let mut pln = Pln::new();
-        let old_xdir = pln.position()xdirection();
+        let old_xdir = pln.position().xdirection();
         pln.u_reverse();
-        let new_xdir = pln.position()xdirection();
+        let new_xdir = pln.position().xdirection();
 
         assert!((old_xdir.x() + new_xdir.x()).abs() < 1e-10);
     }
@@ -522,9 +522,9 @@ mod tests {
     #[test]
     fn test_pln_v_reverse() {
         let mut pln = Pln::new();
-        let old_ydir = pln.position()ydirection();
+        let old_ydir = pln.position().ydirection();
         pln.v_reverse();
-        let new_ydir = pln.position()ydirection();
+        let new_ydir = pln.position().ydirection();
 
         assert!((old_ydir.y() + new_ydir.y()).abs() < 1e-10);
     }

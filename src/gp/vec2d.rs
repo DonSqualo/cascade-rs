@@ -4,7 +4,6 @@
 //! Source: src/FoundationClasses/TKMath/gp/gp_Vec2d.hxx
 
 use crate::gp::XY;
-use crate::precision;
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign, Neg};
 
 /// A 2D vector in cartesian coordinates.

@@ -90,13 +90,13 @@ impl Sphere {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
+        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
     }
 
     /// Reverses the U parametrization.
