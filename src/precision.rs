@@ -45,6 +45,15 @@ pub const fn parametric(p: f64, t: f64) -> f64 {
 /// Value: CONFUSION * 100 = 1.0e-5
 pub const PARAMETRIC_CONFUSION: f64 = CONFUSION * 100.0;
 
+/// gp::Resolution() - fundamental geometric resolution.
+/// Used for zero-length checks in normalization.
+/// Value: DBL_MIN (~2.2e-308)
+/// 
+/// NOTE: This is different from CONFUSION (1e-7).
+/// Resolution is for numerical zero checks.
+/// Confusion is for geometric tolerance.
+pub const RESOLUTION: f64 = f64::MIN_POSITIVE;  // DBL_MIN
+
 /// "Infinite" value for algorithms that need infinity bounds.
 /// Value: 1.0e100 (not f64::INFINITY to avoid NaN in arithmetic)
 pub const INFINITE: f64 = 1.0e100;

@@ -114,7 +114,7 @@ impl Pnt {
     /// Barycenter: sets this to (alpha*this + beta*p) / (alpha + beta).
     #[inline]
     pub fn bary_center(&mut self, alpha: f64, p: &Pnt, beta: f64) {
-        self.coord.set_linear_form(alpha, &self.coord.clone(), beta, &p.coord);
+        self.coord.set_linear_form_2w(alpha, &self.coord.clone(), beta, &p.coord);
         self.coord.divide(alpha + beta);
     }
 

@@ -280,6 +280,39 @@ impl XYZ {
         self.crossed(&inner)
     }
 
+    /// Computes magnitude of cross product: ||self × other||.
+    #[inline]
+    pub fn cross_magnitude(&self, other: &XYZ) -> f64 {
+        self.cross_square_magnitude(other).sqrt()
+    }
+
+    /// Computes square magnitude of cross product: ||self × other||².
+    #[inline]
+    pub const fn cross_square_magnitude(&self, other: &XYZ) -> f64 {
+        let x = self.y * other.z - self.z * other.y;
+        let y = self.z * other.x - self.x * other.z;
+        let z = self.x * other.y - self.y * other.x;
+        x * x + y * y + z * z
+    }
+
+    /// Component-wise multiplication in place.
+    #[inline]
+    pub fn multiply_xyz(&mut self, other: &XYZ) {
+        self.x *= other.x;
+        self.y *= other.y;
+        self.z *= other.z;
+    }
+
+    /// Returns component-wise multiplication.
+    #[inline]
+    pub fn multiplied_xyz(&self, other: &XYZ) -> XYZ {
+        XYZ {
+            x: self.x * other.x,
+            y: self.y * other.y,
+            z: self.z * other.z,
+        }
+    }
+
     /// Normalizes in place. Returns false if modulus is too small.
     pub fn normalize(&mut self) -> bool {
         let d = self.modulus();
@@ -305,17 +338,32 @@ impl XYZ {
         })
     }
 
-    /// Sets to linear form: a1*xyz1 + a2*xyz2.
+    // =========================================================================
+    // SetLinearForm variants (all 6 from OCCT)
+    // =========================================================================
+
+    /// Sets to linear form: a1*xyz1 + a2*xyz2 + a3*xyz3 + xyz4.
     #[inline]
-    pub fn set_linear_form_2(&mut self, a1: f64, xyz1: &XYZ, a2: f64, xyz2: &XYZ) {
-        self.x = a1 * xyz1.x + a2 * xyz2.x;
-        self.y = a1 * xyz1.y + a2 * xyz2.y;
-        self.z = a1 * xyz1.z + a2 * xyz2.z;
+    pub fn set_linear_form_4(
+        &mut self,
+        a1: f64, xyz1: &XYZ,
+        a2: f64, xyz2: &XYZ,
+        a3: f64, xyz3: &XYZ,
+        xyz4: &XYZ
+    ) {
+        self.x = a1 * xyz1.x + a2 * xyz2.x + a3 * xyz3.x + xyz4.x;
+        self.y = a1 * xyz1.y + a2 * xyz2.y + a3 * xyz3.y + xyz4.y;
+        self.z = a1 * xyz1.z + a2 * xyz2.z + a3 * xyz3.z + xyz4.z;
     }
 
     /// Sets to linear form: a1*xyz1 + a2*xyz2 + a3*xyz3.
     #[inline]
-    pub fn set_linear_form_3(&mut self, a1: f64, xyz1: &XYZ, a2: f64, xyz2: &XYZ, a3: f64, xyz3: &XYZ) {
+    pub fn set_linear_form_3w(
+        &mut self,
+        a1: f64, xyz1: &XYZ,
+        a2: f64, xyz2: &XYZ,
+        a3: f64, xyz3: &XYZ
+    ) {
         self.x = a1 * xyz1.x + a2 * xyz2.x + a3 * xyz3.x;
         self.y = a1 * xyz1.y + a2 * xyz2.y + a3 * xyz3.y;
         self.z = a1 * xyz1.z + a2 * xyz2.z + a3 * xyz3.z;
@@ -323,8 +371,39 @@ impl XYZ {
 
     /// Sets to linear form: a1*xyz1 + a2*xyz2 + xyz3.
     #[inline]
-    pub fn set_linear_form(&mut self, a1: f64, xyz1: &XYZ, a2: f64, xyz2: &XYZ) {
-        self.set_linear_form_2(a1, xyz1, a2, xyz2);
+    pub fn set_linear_form_3(
+        &mut self,
+        a1: f64, xyz1: &XYZ,
+        a2: f64, xyz2: &XYZ,
+        xyz3: &XYZ
+    ) {
+        self.x = a1 * xyz1.x + a2 * xyz2.x + xyz3.x;
+        self.y = a1 * xyz1.y + a2 * xyz2.y + xyz3.y;
+        self.z = a1 * xyz1.z + a2 * xyz2.z + xyz3.z;
+    }
+
+    /// Sets to linear form: a1*xyz1 + a2*xyz2.
+    #[inline]
+    pub fn set_linear_form_2w(&mut self, a1: f64, xyz1: &XYZ, a2: f64, xyz2: &XYZ) {
+        self.x = a1 * xyz1.x + a2 * xyz2.x;
+        self.y = a1 * xyz1.y + a2 * xyz2.y;
+        self.z = a1 * xyz1.z + a2 * xyz2.z;
+    }
+
+    /// Sets to linear form: a1*xyz1 + xyz2.
+    #[inline]
+    pub fn set_linear_form_2(&mut self, a1: f64, xyz1: &XYZ, xyz2: &XYZ) {
+        self.x = a1 * xyz1.x + xyz2.x;
+        self.y = a1 * xyz1.y + xyz2.y;
+        self.z = a1 * xyz1.z + xyz2.z;
+    }
+
+    /// Sets to linear form: xyz1 + xyz2.
+    #[inline]
+    pub fn set_linear_form(&mut self, xyz1: &XYZ, xyz2: &XYZ) {
+        self.x = xyz1.x + xyz2.x;
+        self.y = xyz1.y + xyz2.y;
+        self.z = xyz1.z + xyz2.z;
     }
 }
 
@@ -533,6 +612,17 @@ mod tests {
     }
 
     #[test]
+    fn test_xyz_set_coord_index() {
+        let mut xyz = XYZ::new();
+        xyz.set_coord_index(1, 1.5);
+        xyz.set_coord_index(2, 2.5);
+        xyz.set_coord_index(3, 3.5);
+        assert_eq!(xyz.x(), 1.5);
+        assert_eq!(xyz.y(), 2.5);
+        assert_eq!(xyz.z(), 3.5);
+    }
+
+    #[test]
     fn test_xyz_modulus() {
         let xyz = XYZ::from_coords(3.0, 4.0, 0.0);
         assert!((xyz.modulus() - 5.0).abs() < 1e-10);
@@ -595,6 +685,76 @@ mod tests {
     }
 
     #[test]
+    fn test_xyz_cross_magnitude() {
+        // |i × j| = 1
+        let i = XYZ::from_coords(1.0, 0.0, 0.0);
+        let j = XYZ::from_coords(0.0, 1.0, 0.0);
+        assert!((i.cross_magnitude(&j) - 1.0).abs() < 1e-10);
+
+        // Parallel vectors: cross magnitude = 0
+        let a = XYZ::from_coords(1.0, 2.0, 3.0);
+        let b = XYZ::from_coords(2.0, 4.0, 6.0);
+        assert!(a.cross_magnitude(&b) < 1e-10);
+    }
+
+    #[test]
+    fn test_xyz_cross_square_magnitude() {
+        let i = XYZ::from_coords(1.0, 0.0, 0.0);
+        let j = XYZ::from_coords(0.0, 1.0, 0.0);
+        assert!((i.cross_square_magnitude(&j) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_xyz_dot_cross() {
+        // Triple scalar product: a · (b × c) = det([a, b, c])
+        let a = XYZ::from_coords(1.0, 0.0, 0.0);
+        let b = XYZ::from_coords(0.0, 1.0, 0.0);
+        let c = XYZ::from_coords(0.0, 0.0, 1.0);
+        // det of identity = 1
+        assert!((a.dot_cross(&b, &c) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_xyz_cross_cross() {
+        // a × (b × c) = b(a·c) - c(a·b)  (BAC-CAB rule)
+        let a = XYZ::from_coords(1.0, 2.0, 3.0);
+        let b = XYZ::from_coords(4.0, 5.0, 6.0);
+        let c = XYZ::from_coords(7.0, 8.0, 9.0);
+        
+        let result = a.cross_crossed(&b, &c);
+        
+        // Verify using BAC-CAB
+        let a_dot_c = a.dot(&c);
+        let a_dot_b = a.dot(&b);
+        let expected = b.multiplied(a_dot_c).subtracted(&c.multiplied(a_dot_b));
+        
+        assert!((result.x() - expected.x()).abs() < 1e-10);
+        assert!((result.y() - expected.y()).abs() < 1e-10);
+        assert!((result.z() - expected.z()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_xyz_multiply_xyz() {
+        // Component-wise multiplication
+        let mut a = XYZ::from_coords(1.0, 2.0, 3.0);
+        let b = XYZ::from_coords(4.0, 5.0, 6.0);
+        a.multiply_xyz(&b);
+        assert_eq!(a.x(), 4.0);  // 1*4
+        assert_eq!(a.y(), 10.0); // 2*5
+        assert_eq!(a.z(), 18.0); // 3*6
+    }
+
+    #[test]
+    fn test_xyz_multiplied_xyz() {
+        let a = XYZ::from_coords(2.0, 3.0, 4.0);
+        let b = XYZ::from_coords(5.0, 6.0, 7.0);
+        let c = a.multiplied_xyz(&b);
+        assert_eq!(c.x(), 10.0);
+        assert_eq!(c.y(), 18.0);
+        assert_eq!(c.z(), 28.0);
+    }
+
+    #[test]
     fn test_xyz_normalize() {
         let mut xyz = XYZ::from_coords(3.0, 4.0, 0.0);
         assert!(xyz.normalize());
@@ -624,5 +784,100 @@ mod tests {
         let b = XYZ::from_coords(1.0 + 1e-8, 2.0, 3.0);
         assert!(a.is_equal(&b, 1e-7));
         assert!(!a.is_equal(&b, 1e-9));
+    }
+
+    #[test]
+    fn test_xyz_set_linear_form_all_variants() {
+        let xyz1 = XYZ::from_coords(1.0, 0.0, 0.0);
+        let xyz2 = XYZ::from_coords(0.0, 1.0, 0.0);
+        let xyz3 = XYZ::from_coords(0.0, 0.0, 1.0);
+        let xyz4 = XYZ::from_coords(1.0, 1.0, 1.0);
+
+        // set_linear_form (xyz1 + xyz2)
+        let mut r = XYZ::new();
+        r.set_linear_form(&xyz1, &xyz2);
+        assert_eq!(r, XYZ::from_coords(1.0, 1.0, 0.0));
+
+        // set_linear_form_2 (a1*xyz1 + xyz2)
+        let mut r = XYZ::new();
+        r.set_linear_form_2(2.0, &xyz1, &xyz2);
+        assert_eq!(r, XYZ::from_coords(2.0, 1.0, 0.0));
+
+        // set_linear_form_2w (a1*xyz1 + a2*xyz2)
+        let mut r = XYZ::new();
+        r.set_linear_form_2w(2.0, &xyz1, 3.0, &xyz2);
+        assert_eq!(r, XYZ::from_coords(2.0, 3.0, 0.0));
+
+        // set_linear_form_3 (a1*xyz1 + a2*xyz2 + xyz3)
+        let mut r = XYZ::new();
+        r.set_linear_form_3(2.0, &xyz1, 3.0, &xyz2, &xyz3);
+        assert_eq!(r, XYZ::from_coords(2.0, 3.0, 1.0));
+
+        // set_linear_form_3w (a1*xyz1 + a2*xyz2 + a3*xyz3)
+        let mut r = XYZ::new();
+        r.set_linear_form_3w(2.0, &xyz1, 3.0, &xyz2, 4.0, &xyz3);
+        assert_eq!(r, XYZ::from_coords(2.0, 3.0, 4.0));
+
+        // set_linear_form_4 (a1*xyz1 + a2*xyz2 + a3*xyz3 + xyz4)
+        let mut r = XYZ::new();
+        r.set_linear_form_4(2.0, &xyz1, 3.0, &xyz2, 4.0, &xyz3, &xyz4);
+        assert_eq!(r, XYZ::from_coords(3.0, 4.0, 5.0));
+    }
+
+    #[test]
+    fn test_xyz_divide() {
+        let xyz = XYZ::from_coords(4.0, 6.0, 8.0);
+        let divided = xyz.divided(2.0);
+        assert_eq!(divided.x(), 2.0);
+        assert_eq!(divided.y(), 3.0);
+        assert_eq!(divided.z(), 4.0);
+    }
+
+    #[test]
+    fn test_xyz_operators() {
+        let a = XYZ::from_coords(1.0, 2.0, 3.0);
+        
+        // Negation
+        let neg = -a;
+        assert_eq!(neg, XYZ::from_coords(-1.0, -2.0, -3.0));
+        
+        // Scalar multiplication (both directions)
+        let scaled = a * 2.0;
+        assert_eq!(scaled, XYZ::from_coords(2.0, 4.0, 6.0));
+        let scaled2 = 2.0 * a;
+        assert_eq!(scaled2, XYZ::from_coords(2.0, 4.0, 6.0));
+        
+        // Division
+        let div = a / 2.0;
+        assert_eq!(div, XYZ::from_coords(0.5, 1.0, 1.5));
+    }
+
+    #[test]
+    fn test_xyz_as_array() {
+        let xyz = XYZ::from_coords(1.0, 2.0, 3.0);
+        let arr = xyz.as_array();
+        assert_eq!(arr[0], 1.0);
+        assert_eq!(arr[1], 2.0);
+        assert_eq!(arr[2], 3.0);
+    }
+
+    #[test]
+    fn test_xyz_index() {
+        let xyz = XYZ::from_coords(1.0, 2.0, 3.0);
+        assert_eq!(xyz[0], 1.0);
+        assert_eq!(xyz[1], 2.0);
+        assert_eq!(xyz[2], 3.0);
+    }
+
+    #[test]
+    fn test_xyz_from_conversions() {
+        let xyz1: XYZ = [1.0, 2.0, 3.0].into();
+        assert_eq!(xyz1, XYZ::from_coords(1.0, 2.0, 3.0));
+
+        let xyz2: XYZ = (4.0, 5.0, 6.0).into();
+        assert_eq!(xyz2, XYZ::from_coords(4.0, 5.0, 6.0));
+
+        let arr: [f64; 3] = xyz1.into();
+        assert_eq!(arr, [1.0, 2.0, 3.0]);
     }
 }
