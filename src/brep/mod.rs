@@ -196,6 +196,19 @@ pub enum SurfaceType {
         /// The offset distance (positive = outward along normal, negative = inward)
         offset_distance: f64,
     },
+    /// A plate surface - constrained by points and curves
+    /// 
+    /// A BSpline surface that passes through given constraint points
+    /// and is tangent to given constraint curves. Useful for creating
+    /// smooth surfaces that satisfy multiple geometric constraints.
+    PlateSurface {
+        /// The underlying BSpline surface
+        basis_surface: Box<SurfaceType>,
+        /// Constraint points that the surface passes through
+        constraint_points: Vec<[f64; 3]>,
+        /// Constraint curves that the surface is tangent to
+        constraint_curves: Vec<CurveType>,
+    },
 }
 
 impl SurfaceType {
@@ -324,6 +337,14 @@ impl SurfaceType {
                     point[1] + offset_distance * normal[1],
                     point[2] + offset_distance * normal[2],
                 ]
+            }
+            SurfaceType::PlateSurface {
+                basis_surface,
+                constraint_points: _,
+                constraint_curves: _,
+            } => {
+                // Evaluate the underlying BSpline basis surface
+                basis_surface.point_at(u, v)
             }
         }
     }
@@ -456,6 +477,14 @@ impl SurfaceType {
                 offset_distance: _,
             } => {
                 // The normal to an offset surface is the same as the normal to the basis surface
+                basis_surface.normal_at(u, v)
+            }
+            SurfaceType::PlateSurface {
+                basis_surface,
+                constraint_points: _,
+                constraint_curves: _,
+            } => {
+                // The normal to a plate surface is the normal of its basis surface
                 basis_surface.normal_at(u, v)
             }
         }

@@ -811,6 +811,15 @@ fn is_face_concave(face: &Face) -> Result<bool> {
             };
             is_face_concave(&dummy_face)
         }
+        
+        SurfaceType::PlateSurface { basis_surface, .. } => {
+            let dummy_face = Face {
+                outer_wire: face.outer_wire.clone(),
+                inner_wires: face.inner_wires.clone(),
+                surface_type: (**basis_surface).clone(),
+            };
+            is_face_concave(&dummy_face)
+        }
     }
 }
 
@@ -1006,8 +1015,8 @@ fn calculate_face_center_and_normal(face: &Face) -> ([f64; 3], [f64; 3]) {
                 [0.0, 0.0, 1.0]
             }
         }
-        SurfaceType::RectangularTrimmedSurface { .. } | SurfaceType::OffsetSurface { .. } => {
-            // Approximate normal from vertices for trimmed/offset surfaces
+        SurfaceType::RectangularTrimmedSurface { .. } | SurfaceType::OffsetSurface { .. } | SurfaceType::PlateSurface { .. } => {
+            // Approximate normal from vertices for trimmed/offset/plate surfaces
             if vertices.len() >= 3 {
                 let e1 = [vertices[1][0] - vertices[0][0], 
                          vertices[1][1] - vertices[0][1], 
@@ -1973,6 +1982,11 @@ pub fn project_point_to_surface(
             ];
             
             Ok((u, v, offset_pt))
+        }
+        
+        SurfaceType::PlateSurface { basis_surface, .. } => {
+            // Project to the basis surface for plate surfaces
+            project_point_to_surface(point, basis_surface)
         }
     }
 }

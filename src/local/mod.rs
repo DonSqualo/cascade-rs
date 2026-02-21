@@ -91,6 +91,11 @@ pub fn split_face(face: &Face, splitting_curve: &Edge) -> Result<Vec<Face>> {
                 "Split face on offset surfaces".to_string(),
             ))
         }
+        SurfaceType::PlateSurface { .. } => {
+            Err(CascadeError::NotImplemented(
+                "Split face on plate surfaces".to_string(),
+            ))
+        }
     }
 }
 

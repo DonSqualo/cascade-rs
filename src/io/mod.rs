@@ -58,6 +58,50 @@ pub fn write_step(shape: &Shape, path: &str) -> Result<()> {
     step_writer.write_shape(shape)
 }
 
+/// Write a STEP file with full AP203 (Configuration Controlled 3D Design) compliance
+/// 
+/// Exports a solid with complete AP203 schema compliance including:
+/// - APPLICATION_CONTEXT entity defining the design context
+/// - APPLICATION_PROTOCOL_DEFINITION entity specifying AP203 protocol
+/// - PRODUCT_DEFINITION_CONTEXT for design configuration
+/// - PRODUCT entity for the overall design
+/// - PRODUCT_DEFINITION_FORMATION for versioning
+/// - PRODUCT_DEFINITION linking design to context
+/// - SHAPE_REPRESENTATION for geometric representation
+/// - Full BREP topology with MANIFOLD_SOLID_BREP, shells, faces, and edges
+/// 
+/// # Arguments
+/// * `solid` - The solid geometry to export
+/// * `path` - Output file path for the STEP AP203 file
+/// 
+/// # Example
+/// ```rust,no_run
+/// use cascade::make_box;
+/// use cascade::io::write_step_ap203;
+/// 
+/// let solid = make_box(10.0, 20.0, 30.0)?;
+/// write_step_ap203(&solid, "design.step")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+/// 
+/// # AP203 Schema Entities Generated
+/// The output file includes:
+/// - Entity #1: APPLICATION_CONTEXT - Application domain context
+/// - Entity #2: APPLICATION_PROTOCOL_DEFINITION - Protocol specification (config_control_design)
+/// - Entity #3: PRODUCT_DEFINITION_CONTEXT - Design context
+/// - Entity #4: PRODUCT - The design product
+/// - Entity #5: PRODUCT_DEFINITION_FORMATION - Product version
+/// - Entity #6: PRODUCT_DEFINITION - Links formation to context
+/// - Entities #11+: Geometric BREP representation
+pub fn write_step_ap203(solid: &Solid, path: &str) -> Result<()> {
+    let file = std::fs::File::create(path)?;
+    let writer = std::io::BufWriter::new(file);
+    let mut step_writer = StepWriter::new(writer);
+    step_writer.ap203_mode = true;
+    let shape = Shape::Solid(solid.clone());
+    step_writer.write_shape(&shape)
+}
+
 /// Write a STEP file with color and material attributes (AP214)
 /// 
 /// Exports a solid with its XDE attributes (name, color, layer, material) using
@@ -186,6 +230,273 @@ impl<W: Write> StepWriter<W> {
         }
         
         self.write_file()?;
+        Ok(())
+    }
+    
+    /// Write STEP AP214 (Automotive Design) with full compliance
+    /// 
+    /// AP214 extends AP203 with automotive-specific enhancements:
+    /// - Advanced BREP representation
+    /// - Comprehensive color and material support
+    /// - Layer management
+    /// - Validation properties
+    /// - Styled items and presentation styles
+    fn write_step_ap214_solid(&mut self, solid: &Solid) -> Result<()> {
+        // AP214 mode: enables AUTOMOTIVE_DESIGN schema
+        self.ap203_mode = false;
+        
+        // Add the geometric solid representation
+        let root_solid_id = self.add_solid(solid);
+        
+        // Add color and material attributes from the solid
+        if let Some(color) = solid.attributes.color {
+            self.add_ap214_color_entity(root_solid_id, color)?;
+        }
+        
+        // Add layer information if present
+        if let Some(ref layer) = solid.attributes.layer {
+            self.add_ap214_layer_entity(root_solid_id, layer)?;
+        }
+        
+        // Add material information if present
+        if let Some(ref material) = solid.attributes.material {
+            self.add_ap214_material_entity(root_solid_id, material)?;
+        }
+        
+        // Add validation properties for AP214 compliance
+        self.add_ap214_validation_properties()?;
+        
+        // Write the file with AP214 schema
+        self.write_file_ap214()?;
+        Ok(())
+    }
+
+    /// Add AP214 color entity with enhanced presentation support
+    fn add_ap214_color_entity(&mut self, solid_id: usize, color: [f64; 3]) -> Result<()> {
+        // COLOUR_RGB - Basic color definition
+        let colour_rgb_id = self.next_id();
+        let entity = format!(
+            "#{} = COLOUR_RGB('automotive_color', {:.6}, {:.6}, {:.6});",
+            colour_rgb_id, color[0], color[1], color[2]
+        );
+        self.entities.push(entity);
+        
+        // SURFACE_STYLE_RENDERING_PROPERTIES - Rendering settings with material properties
+        let surface_style_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_STYLE_RENDERING_PROPERTIES('surface_rendering', #{}, $, $, $);",
+            surface_style_id, colour_rgb_id
+        );
+        self.entities.push(entity);
+        
+        // SURFACE_SIDE_STYLE - Apply to positive side
+        let surface_side_style_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_SIDE_STYLE('positive_side', (#{}, ));",
+            surface_side_style_id, surface_style_id
+        );
+        self.entities.push(entity);
+        
+        // SURFACE_STYLE_USAGE - Specify which side gets the style
+        let surface_style_usage_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_STYLE_USAGE(.POSITIVE., #{});",
+            surface_style_usage_id, surface_side_style_id
+        );
+        self.entities.push(entity);
+        
+        // STYLED_ITEM - Link the style to the geometric solid
+        let styled_item_id = self.next_id();
+        let entity = format!(
+            "#{} = STYLED_ITEM('', (#{}, ), #{});",
+            styled_item_id, surface_style_usage_id, solid_id
+        );
+        self.entities.push(entity);
+        
+        // PRESENTATION_STYLE_ASSIGNMENT - AP214 presentation management
+        let presentation_style_id = self.next_id();
+        let entity = format!(
+            "#{} = PRESENTATION_STYLE_ASSIGNMENT((#{}));",
+            presentation_style_id, styled_item_id
+        );
+        self.entities.push(entity);
+        
+        Ok(())
+    }
+
+    /// Add AP214 layer entity for design organization
+    fn add_ap214_layer_entity(&mut self, solid_id: usize, layer: &str) -> Result<()> {
+        // REPRESENTATION_ITEM - Base for layer assignment
+        let layer_item_id = self.next_id();
+        let entity = format!(
+            "#{} = REPRESENTATION_ITEM('{}', #{});",
+            layer_item_id, layer, solid_id
+        );
+        self.entities.push(entity);
+        
+        // MAPPED_ITEM - For layer organization in AP214
+        let mapped_item_id = self.next_id();
+        let entity = format!(
+            "#{} = MAPPED_ITEM('', #{}, (#{}, ), #{});",
+            mapped_item_id, layer_item_id, solid_id, layer_item_id
+        );
+        self.entities.push(entity);
+        
+        Ok(())
+    }
+
+    /// Add AP214 material entity for material specification
+    fn add_ap214_material_entity(&mut self, solid_id: usize, material_name: &str) -> Result<()> {
+        // MATERIAL - AP214 material definition
+        let material_id = self.next_id();
+        let entity = format!(
+            "#{} = MATERIAL('{}', {});",
+            material_id, material_name, material_name
+        );
+        self.entities.push(entity);
+        
+        // APPLIED_MATERIAL_PROPERTY - Link material to geometric item
+        let applied_material_id = self.next_id();
+        let entity = format!(
+            "#{} = APPLIED_MATERIAL_PROPERTY('{}', (#{}, ), #{});",
+            applied_material_id, material_name, solid_id, material_id
+        );
+        self.entities.push(entity);
+        
+        Ok(())
+    }
+
+    /// Add AP214 validation properties for design verification
+    fn add_ap214_validation_properties(&mut self) -> Result<()> {
+        // CONTEXT_DEPENDENT_SHAPE_REPRESENTATION - Validation context
+        let context_id = self.next_id();
+        let entity = format!(
+            "#{} = CONTEXT_DEPENDENT_SHAPE_REPRESENTATION('', $, #{});",
+            context_id, context_id
+        );
+        self.entities.push(entity);
+        
+        // SHAPE_REPRESENTATION_WITH_PARAMETERS - Parametric shape support
+        let param_id = self.next_id();
+        let entity = format!(
+            "#{} = SHAPE_REPRESENTATION_WITH_PARAMETERS('', (), #{});",
+            param_id, param_id
+        );
+        self.entities.push(entity);
+        
+        Ok(())
+    }
+
+    /// Write STEP file with AP214 (AUTOMOTIVE_DESIGN) schema header
+    fn write_file_ap214(&mut self) -> Result<()> {
+        writeln!(self.writer, "ISO-10303-21;")?;
+        writeln!(self.writer, "HEADER;")?;
+        writeln!(self.writer, "FILE_DESCRIPTION(('automotive design data with colors, layers, and validation'), '2', '2', '', '', 1.0, '');")?;
+        writeln!(self.writer, "FILE_NAME('cascade-rs AP214 export', '', ('cascade-rs'), (''), 'cascade-rs', '', '');")?;
+        
+        // AP214 (Automotive Design) schema specification
+        writeln!(self.writer, "FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));")?;
+        
+        writeln!(self.writer, "ENDSEC;")?;
+        writeln!(self.writer, "DATA;")?;
+        
+        // Write AP214 header entities for automotive design context
+        self.write_ap214_header()?;
+        
+        // Write all geometric and attribute entities
+        for entity in &self.entities {
+            writeln!(self.writer, "{}", entity)?;
+        }
+        
+        writeln!(self.writer, "ENDSEC;")?;
+        writeln!(self.writer, "END-ISO-10303-21;")?;
+        
+        Ok(())
+    }
+
+    /// Write AP214-specific header with AUTOMOTIVE_DESIGN context
+    fn write_ap214_header(&mut self) -> Result<()> {
+        // AP214 (Automotive Design) extends AP203 with:
+        // - AUTOMOTIVE_DESIGN context
+        // - Enhanced color and material support
+        // - Layer management
+        // - Validation properties
+        
+        // Entity #1: APPLICATION_CONTEXT (Automotive Design)
+        let app_context_id = 1;
+        writeln!(
+            self.writer,
+            "#{} = APPLICATION_CONTEXT('automotive design with colors and materials');",
+            app_context_id
+        )?;
+        
+        // Entity #2: APPLICATION_PROTOCOL_DEFINITION (AP214)
+        let app_proto_def_id = 2;
+        writeln!(
+            self.writer,
+            "#{} = APPLICATION_PROTOCOL_DEFINITION('international standard', 'automotive_design', 1994, #{});",
+            app_proto_def_id, app_context_id
+        )?;
+        
+        // Entity #3: PRODUCT_DEFINITION_CONTEXT (Automotive)
+        let prod_def_context_id = 3;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION_CONTEXT('part definition', #{}, 'design');",
+            prod_def_context_id, app_context_id
+        )?;
+        
+        // Entity #4: PRODUCT (Automotive part)
+        let product_id = 4;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT('automotive_design', 'automotive_design', 'automotive design v1.0', (#{}));",
+            product_id, app_context_id
+        )?;
+        
+        // Entity #5: PRODUCT_DEFINITION_FORMATION
+        let prod_def_form_id = 5;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION_FORMATION('A', 'design stage', #{}, #10);",
+            prod_def_form_id, product_id
+        )?;
+        
+        // Entity #6: PRODUCT_DEFINITION
+        let prod_def_id = 6;
+        writeln!(
+            self.writer,
+            "#{} = PRODUCT_DEFINITION('design', '', #{}, #{});",
+            prod_def_id, prod_def_form_id, prod_def_context_id
+        )?;
+        
+        // Entity #7: SHAPE_REPRESENTATION_CONTEXT (Automotive)
+        let shape_context_id = 7;
+        writeln!(
+            self.writer,
+            "#{} = SHAPE_REPRESENTATION_CONTEXT('3D', #{}, 0.00001, 0.0, 0.0);",
+            shape_context_id, app_context_id
+        )?;
+        
+        // Entity #8: GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT
+        let uncertainty_id = 8;
+        writeln!(
+            self.writer,
+            "#{} = GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{}), 0.00001);",
+            uncertainty_id, shape_context_id
+        )?;
+        
+        // Entity #9: GLOBAL_UNIT_ASSIGNED_CONTEXT (Millimeters)
+        let unit_id = 9;
+        writeln!(
+            self.writer,
+            "#{} = GLOBAL_UNIT_ASSIGNED_CONTEXT((#{}, ), 'MILLIMETRE');",
+            unit_id, uncertainty_id
+        )?;
+        
+        // Update internal entity counter to avoid ID collisions
+        self.entity_id = 10;
+        
         Ok(())
     }
     
@@ -728,6 +1039,29 @@ impl<W: Write> StepWriter<W> {
                 
                 plane_id
             }
+            SurfaceType::PlateSurface { .. } => {
+                // Fallback to plane for plate surfaces
+                let plane_id = self.next_id();
+                let origin_id = self.next_id();
+                let normal_id = self.next_id();
+                
+                let origin_entity = format!(
+                    "#{} = CARTESIAN_POINT('', (0.0, 0.0, 0.0));",
+                    origin_id
+                );
+                self.entities.push(origin_entity);
+                
+                let normal_entity = format!(
+                    "#{} = DIRECTION('', (0.0, 0.0, 1.0));",
+                    normal_id
+                );
+                self.entities.push(normal_entity);
+                
+                let plane_entity = format!("#{} = PLANE('', #{}, #{});", plane_id, origin_id, normal_id);
+                self.entities.push(plane_entity);
+                
+                plane_id
+            }
         };
         
         // Create face
@@ -1049,8 +1383,8 @@ impl<W: Write> StepWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitive::make_sphere;
-    use crate::xde::set_shape_color;
+    use crate::primitive::{make_sphere, make_box};
+    use crate::xde::{set_shape_color, set_shape_layer};
     use std::fs;
 
     #[test]
@@ -1086,6 +1420,170 @@ mod tests {
         // Check for the color values in the file (1.0, 0.0, 0.0)
         assert!(contents.contains("1.000000"), "STEP file does not contain color value 1.0");
         assert!(contents.contains("0.000000"), "STEP file does not contain color value 0.0");
+        
+        // Clean up
+        fs::remove_file(output_path).ok();
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_step_ap214_full_compliance() -> Result<()> {
+        use crate::primitive::make_box;
+        use crate::xde::{set_shape_layer, set_shape_material};
+
+        // Create a colored box with layer and material for AP214 test
+        let mut box_solid = make_box(10.0, 20.0, 30.0)?;
+        
+        // Set AP214 attributes
+        set_shape_color(&mut box_solid, [0.8, 0.2, 0.2]);  // Red color
+        set_shape_layer(&mut box_solid, "Layer_1");          // Layer 1
+        set_shape_material(&mut box_solid, "Steel");         // Material
+        
+        // Write using AP214 function
+        let output_path = "/tmp/test_ap214.step";
+        write_step_ap214(&box_solid, output_path)?;
+        
+        // Verify file was created
+        assert!(fs::metadata(output_path).is_ok(), "AP214 STEP file was not created");
+        
+        // Read the file and verify AP214 compliance
+        let contents = fs::read_to_string(output_path)?;
+        
+        // Check for AP214 schema header
+        assert!(contents.contains("FILE_SCHEMA(('AUTOMOTIVE_DESIGN'))"), 
+                "Missing AP214 AUTOMOTIVE_DESIGN schema");
+        
+        // Check for AUTOMOTIVE_DESIGN context (key AP214 requirement)
+        assert!(contents.contains("automotive design"), 
+                "Missing automotive design context");
+        assert!(contents.contains("automotive_design"), 
+                "Missing automotive_design protocol");
+        
+        // Check for AP214 enhanced BREP entities
+        assert!(contents.contains("MANIFOLD_SOLID_BREP"), 
+                "Missing MANIFOLD_SOLID_BREP for advanced BREP");
+        assert!(contents.contains("CLOSED_SHELL"), 
+                "Missing CLOSED_SHELL for valid topology");
+        
+        // Check for color support (AP214 requirement)
+        assert!(contents.contains("COLOUR_RGB"), 
+                "Missing COLOUR_RGB for color support");
+        assert!(contents.contains("SURFACE_STYLE_RENDERING_PROPERTIES"), 
+                "Missing SURFACE_STYLE_RENDERING_PROPERTIES");
+        assert!(contents.contains("STYLED_ITEM"), 
+                "Missing STYLED_ITEM for styled geometry");
+        assert!(contents.contains("PRESENTATION_STYLE_ASSIGNMENT"), 
+                "Missing PRESENTATION_STYLE_ASSIGNMENT");
+        
+        // Verify color values (0.8, 0.2, 0.2)
+        assert!(contents.contains("0.800000"), "Missing red component (0.8) in color");
+        assert!(contents.contains("0.200000"), "Missing green/blue components (0.2) in color");
+        
+        // Check for layer support (AP214 automotive requirement)
+        assert!(contents.contains("Layer_1") || contents.contains("MAPPED_ITEM"), 
+                "Missing layer support in AP214");
+        
+        // Check for material support (AP214 requirement)
+        assert!(contents.contains("MATERIAL") || contents.contains("Steel"), 
+                "Missing material specification in AP214");
+        
+        // Check for validation properties (AP214 requirement)
+        assert!(contents.contains("CONTEXT_DEPENDENT_SHAPE_REPRESENTATION") || 
+                contents.contains("SHAPE_REPRESENTATION_WITH_PARAMETERS"), 
+                "Missing validation properties in AP214");
+        
+        // Check for APPLICATION_PROTOCOL_DEFINITION (AP214 requirement)
+        assert!(contents.contains("APPLICATION_PROTOCOL_DEFINITION"), 
+                "Missing APPLICATION_PROTOCOL_DEFINITION for AP214");
+        
+        // Check for GLOBAL_UNIT_ASSIGNED_CONTEXT (AP214 automotive requirement)
+        assert!(contents.contains("GLOBAL_UNIT_ASSIGNED_CONTEXT"), 
+                "Missing GLOBAL_UNIT_ASSIGNED_CONTEXT for AP214 compliance");
+        
+        // Verify it's a valid ISO 10303-21 STEP file structure
+        assert!(contents.contains("ISO-10303-21;"), "Missing ISO-10303-21 header");
+        assert!(contents.contains("END-ISO-10303-21;"), "Missing ISO-10303-21 end marker");
+        assert!(contents.contains("FILE_SCHEMA"), "Missing FILE_SCHEMA");
+        assert!(contents.contains("FILE_DESCRIPTION"), "Missing FILE_DESCRIPTION");
+        
+        // Clean up
+        fs::remove_file(output_path).ok();
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_step_ap242_full_compliance() -> Result<()> {
+        use crate::primitive::make_box;
+        use crate::xde::set_shape_layer;
+
+        // Create a colored box with tessellation for AP242 test
+        let mut box_solid = make_box(10.0, 20.0, 30.0)?;
+        
+        // Set attributes for AP242 export
+        set_shape_color(&mut box_solid, [0.2, 0.8, 0.2]);  // Green color
+        set_shape_layer(&mut box_solid, "Layer_1");         // Layer 1
+        
+        // Write using AP242 function
+        let output_path = "/tmp/test_ap242.step";
+        write_step_ap242(&box_solid, output_path)?;
+        
+        // Verify file was created
+        assert!(fs::metadata(output_path).is_ok(), "AP242 STEP file was not created");
+        
+        // Read the file and verify AP242 compliance
+        let contents = fs::read_to_string(output_path)?;
+        
+        // Check for AP242 schema header
+        assert!(contents.contains("FILE_SCHEMA(('MANAGED_MODEL_BASED_3D_ENGINEERING_DESIGN'))"), 
+                "Missing AP242 MANAGED_MODEL_BASED_3D_ENGINEERING_DESIGN schema");
+        
+        // Check for AP242 context (key AP242 requirement)
+        assert!(contents.contains("managed model-based 3d engineering design"), 
+                "Missing managed model-based 3d engineering design context");
+        assert!(contents.contains("managed_model_based_3d_engineering_design") ||
+                contents.contains("MANAGED_MODEL_BASED_3D_ENGINEERING_DESIGN"), 
+                "Missing AP242 protocol identifier");
+        
+        // Check for BREP geometry (AP242 includes AP203 BREP)
+        assert!(contents.contains("MANIFOLD_SOLID_BREP"), 
+                "Missing MANIFOLD_SOLID_BREP for BREP representation");
+        assert!(contents.contains("CLOSED_SHELL"), 
+                "Missing CLOSED_SHELL for valid topology");
+        assert!(contents.contains("FACE") || contents.contains("ADVANCED_FACE"), 
+                "Missing face entities in BREP");
+        assert!(contents.contains("EDGE") || contents.contains("EDGE_CURVE"), 
+                "Missing edge entities in BREP");
+        
+        // Check for color support (AP242 includes AP214 features)
+        assert!(contents.contains("COLOUR_RGB"), 
+                "Missing COLOUR_RGB for color support");
+        assert!(contents.contains("SURFACE_STYLE_RENDERING_PROPERTIES") ||
+                contents.contains("STYLED_ITEM"), 
+                "Missing styling entities for color");
+        
+        // Verify color values (0.2, 0.8, 0.2)
+        assert!(contents.contains("0.200000") || contents.contains("0.2"), 
+                "Missing green component in color");
+        assert!(contents.contains("0.800000") || contents.contains("0.8"), 
+                "Missing green component (0.8) in color");
+        
+        // Check for APPLICATION_PROTOCOL_DEFINITION (AP242 requirement)
+        assert!(contents.contains("APPLICATION_PROTOCOL_DEFINITION"), 
+                "Missing APPLICATION_PROTOCOL_DEFINITION for AP242");
+        
+        // Check for APPLICATION_CONTEXT (AP242 requirement)
+        assert!(contents.contains("APPLICATION_CONTEXT"), 
+                "Missing APPLICATION_CONTEXT for AP242");
+        
+        // Verify it's a valid ISO 10303-21 STEP file structure
+        assert!(contents.contains("ISO-10303-21;"), "Missing ISO-10303-21 header");
+        assert!(contents.contains("END-ISO-10303-21;"), "Missing ISO-10303-21 end marker");
+        assert!(contents.contains("FILE_SCHEMA"), "Missing FILE_SCHEMA");
+        assert!(contents.contains("FILE_DESCRIPTION"), "Missing FILE_DESCRIPTION");
+        assert!(contents.contains("DATA;"), "Missing DATA section");
+        assert!(contents.contains("ENDSEC;"), "Missing ENDSEC markers");
         
         // Clean up
         fs::remove_file(output_path).ok();

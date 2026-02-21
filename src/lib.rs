@@ -45,7 +45,7 @@ pub use check::{check_valid, check_watertight, check_self_intersection, ShapeErr
 pub use intersect::{intersect_surfaces, Curve2D, intersect_curves_2d};
 pub use offset::{thick_solid, make_shell};
 pub use local::{split_face, split_edge, split_edge_at_point, remove_face};
-pub use approx::{approximate_curve, interpolate_curve, interpolate_surface};
+pub use approx::{approximate_curve, interpolate_curve, interpolate_surface, make_plate_surface};
 pub use query::{extrema_curve_curve, extrema_point_solid, project_point_to_curve, project_point_to_surface, project_curve_to_surface, bounding_box, mass_properties, MassProperties, moments_of_inertia, moments_of_inertia_at_com, InertiaMatrix, principal_axes, PrincipalAxes, classify_shape, ShapeClass};
 pub use io::{StepDimension, DimensionType, StepGeometricTolerance, write_step_with_pmi, write_step_with_attributes};
 pub use xde::{ShapeAttributes, set_shape_color, get_shape_color, set_shape_name, get_shape_name, set_shape_attributes, get_shape_attributes, set_shape_layer, get_shape_layer, set_shape_material, get_shape_material};

@@ -3,6 +3,9 @@ mod tests {
     use cascade::{make_box, io};
     use std::fs;
     
+    // Assembly tests require write_step_assembly() which hasn't been implemented yet
+    // These tests are placeholders for future assembly support
+    
     #[test]
     fn test_write_step_box() {
         // Create a simple box
@@ -103,5 +106,44 @@ mod tests {
                 "Missing 'config_control_design' protocol identifier");
         assert!(contents.contains("'configuration controlled 3D designs"), 
                 "Missing configuration controlled design context");
+    }
+    
+    #[test]
+    fn test_write_step_ap203_export() {
+        // Test the dedicated write_step_ap203 function
+        let solid = make_box(10.0, 20.0, 30.0).expect("Failed to create box");
+        
+        // Write using the AP203-specific function
+        let path = "/tmp/test_ap203_export.step";
+        io::write_step_ap203(&solid, path).expect("Failed to write AP203 STEP file");
+        
+        // Verify the file was created
+        assert!(fs::metadata(path).is_ok(), "AP203 STEP file not created");
+        
+        let contents = fs::read_to_string(path).expect("Failed to read file");
+        
+        // Verify AP203 schema
+        assert!(contents.contains("FILE_SCHEMA(('CONFIG_CONTROL_DESIGN'))"), 
+                "Missing AP203 schema in write_step_ap203()");
+        
+        // Check all required AP203 entities
+        assert!(contents.contains("APPLICATION_CONTEXT"), "Missing APPLICATION_CONTEXT");
+        assert!(contents.contains("APPLICATION_PROTOCOL_DEFINITION"), "Missing APPLICATION_PROTOCOL_DEFINITION");
+        assert!(contents.contains("PRODUCT_DEFINITION_CONTEXT"), "Missing PRODUCT_DEFINITION_CONTEXT");
+        assert!(contents.contains("PRODUCT_DEFINITION_FORMATION"), "Missing PRODUCT_DEFINITION_FORMATION");
+        assert!(contents.contains("PRODUCT"), "Missing PRODUCT");
+        assert!(contents.contains("PRODUCT_DEFINITION"), "Missing PRODUCT_DEFINITION");
+        assert!(contents.contains("MANIFOLD_SOLID_BREP"), "Missing MANIFOLD_SOLID_BREP geometry");
+        assert!(contents.contains("CLOSED_SHELL"), "Missing CLOSED_SHELL");
+        assert!(contents.contains("CARTESIAN_POINT"), "Missing CARTESIAN_POINT");
+        
+        // Verify the file structure is complete
+        assert!(contents.contains("ISO-10303-21;"), "Missing ISO header");
+        assert!(contents.contains("HEADER;"), "Missing HEADER section");
+        assert!(contents.contains("FILE_DESCRIPTION"), "Missing FILE_DESCRIPTION");
+        assert!(contents.contains("FILE_NAME"), "Missing FILE_NAME");
+        assert!(contents.contains("DATA;"), "Missing DATA section");
+        assert!(contents.contains("ENDSEC;"), "Missing ENDSEC");
+        assert!(contents.contains("END-ISO-10303-21;"), "Missing END marker");
     }
 }
