@@ -16,7 +16,7 @@ impl Hypr {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax2::new(),
+            pos: Ax2::standard(),
             major_radius: f64::MAX,
             minor_radius: f64::MIN,
         }
@@ -106,7 +106,7 @@ impl Hypr {
         let c = (self.major_radius * self.major_radius + self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.pos.x_direction();
+        let xdir = self.posxdirection();
         Pnt::from_coords(
             loc.x() + c * xdir.x(),
             loc.y() + c * xdir.y(),
@@ -119,7 +119,7 @@ impl Hypr {
         let c = (self.major_radius * self.major_radius + self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.pos.x_direction();
+        let xdir = self.posxdirection();
         Pnt::from_coords(
             loc.x() - c * xdir.x(),
             loc.y() - c * xdir.y(),
@@ -134,7 +134,7 @@ impl Hypr {
             pos: Ax2::from_pnt_dir(
                 self.pos.location(),
                 self.pos.direction(),
-                self.pos.y_direction(),
+                self.posydirection(),
             ),
             major_radius: self.minor_radius,
             minor_radius: self.major_radius,
@@ -144,7 +144,7 @@ impl Hypr {
     /// Returns the conjugate branch 2 (on negative Y side).
     #[inline]
     pub fn conjugate_branch2(&self) -> Hypr {
-        let mut ydir = self.pos.y_direction();
+        let mut ydir = self.posydirection();
         ydir.reverse();
         Hypr {
             pos: Ax2::from_pnt_dir(self.pos.location(), self.pos.direction(), ydir),
@@ -156,13 +156,13 @@ impl Hypr {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Rotate the hyperbola.
@@ -225,28 +225,28 @@ mod tests {
 
     #[test]
     fn test_hypr_basic() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         assert_eq!(hypr.major_radius(), 5.0);
         assert_eq!(hypr.minor_radius(), 3.0);
     }
 
     #[test]
     fn test_hypr_eccentricity() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         let e = hypr.eccentricity();
         assert!(e > 1.0);
     }
 
     #[test]
     fn test_hypr_focal() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         let f = hypr.focal();
         assert!(f > 0.0);
     }
 
     #[test]
     fn test_hypr_foci() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         let f1 = hypr.focus1();
         let f2 = hypr.focus2();
         let dist = f1.distance(&f2);
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_hypr_conjugate() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         let conj1 = hypr.conjugate_branch1();
         assert_eq!(conj1.major_radius(), 3.0);
         assert_eq!(conj1.minor_radius(), 5.0);
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_hypr_scale() {
-        let hypr = Hypr::from_ax2(Ax2::new(), 5.0, 3.0);
+        let hypr = Hypr::from_ax2(Ax2::standard(), 5.0, 3.0);
         let scaled = hypr.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.major_radius(), 10.0);
         assert_eq!(scaled.minor_radius(), 6.0);

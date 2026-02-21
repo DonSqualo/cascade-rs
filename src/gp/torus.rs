@@ -17,7 +17,7 @@ impl Torus {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax3::new(),
+            pos: Ax3::standard(),
             major_radius: f64::MAX,
             minor_radius: f64::MAX,
         }
@@ -111,25 +111,25 @@ impl Torus {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Reverses the U parametrization.
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.pos.y_reverse();
+        self.posy_reverse();
     }
 
     /// Reverses the V parametrization.
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.pos.z_reverse();
+        self.posz_reverse();
     }
 
     /// Rotate the torus.
@@ -191,34 +191,34 @@ mod tests {
 
     #[test]
     fn test_torus_basic() {
-        let torus = Torus::from_ax3(Ax3::new(), 5.0, 2.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 5.0, 2.0);
         assert_eq!(torus.major_radius(), 5.0);
         assert_eq!(torus.minor_radius(), 2.0);
     }
 
     #[test]
     fn test_torus_area() {
-        let torus = Torus::from_ax3(Ax3::new(), 1.0, 1.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 1.0, 1.0);
         let area = torus.area();
         assert!((area - 4.0 * PI * PI).abs() < 1e-10);
     }
 
     #[test]
     fn test_torus_volume() {
-        let torus = Torus::from_ax3(Ax3::new(), 1.0, 1.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 1.0, 1.0);
         let vol = torus.volume();
         assert!((vol - 2.0 * PI * PI).abs() < 1e-10);
     }
 
     #[test]
     fn test_torus_direct() {
-        let torus = Torus::from_ax3(Ax3::new(), 5.0, 2.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 5.0, 2.0);
         assert!(torus.direct());
     }
 
     #[test]
     fn test_torus_scale() {
-        let torus = Torus::from_ax3(Ax3::new(), 5.0, 2.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 5.0, 2.0);
         let scaled = torus.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.major_radius(), 10.0);
         assert_eq!(scaled.minor_radius(), 4.0);
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_torus_translate() {
-        let torus = Torus::from_ax3(Ax3::new(), 5.0, 2.0);
+        let torus = Torus::from_ax3(Ax3::standard(), 5.0, 2.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let trans = torus.translated(&v);
         assert!((trans.location().x() - 1.0).abs() < 1e-10);

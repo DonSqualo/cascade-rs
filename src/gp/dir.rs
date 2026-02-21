@@ -98,21 +98,9 @@ impl Dir {
         self.coord.x()
     }
 
-    /// Returns X component (alias for x_val).
-    #[inline]
-    pub const fn x(&self) -> f64 {
-        self.coord.x()
-    }
-
     /// Returns Y component.
     #[inline]
     pub const fn y_val(&self) -> f64 {
-        self.coord.y()
-    }
-
-    /// Returns Y component (alias for y_val).
-    #[inline]
-    pub const fn y(&self) -> f64 {
         self.coord.y()
     }
 
@@ -122,9 +110,21 @@ impl Dir {
         self.coord.z()
     }
 
-    /// Returns Z component (alias for z_val).
+    /// Returns X component (alias).
     #[inline]
-    pub const fn z(&self) -> f64 {
+    pub const fn x_coord(&self) -> f64 {
+        self.coord.x()
+    }
+
+    /// Returns Y component (alias).
+    #[inline]
+    pub const fn y_coord(&self) -> f64 {
+        self.coord.y()
+    }
+
+    /// Returns Z component (alias).
+    #[inline]
+    pub const fn z_coord(&self) -> f64 {
         self.coord.z()
     }
 

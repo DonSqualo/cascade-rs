@@ -16,7 +16,7 @@ impl Sphere {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax3::new(),
+            pos: Ax3::standard(),
             radius: f64::MAX,
         }
     }
@@ -90,25 +90,25 @@ impl Sphere {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Reverses the U parametrization.
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.pos.y_reverse();
+        self.posy_reverse();
     }
 
     /// Reverses the V parametrization.
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.pos.z_reverse();
+        self.posz_reverse();
     }
 
     /// Rotate the sphere.
@@ -168,47 +168,47 @@ mod tests {
 
     #[test]
     fn test_sphere_basic() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 5.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 5.0);
         assert_eq!(sphere.radius(), 5.0);
     }
 
     #[test]
     fn test_sphere_area() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 1.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 1.0);
         let area = sphere.area();
         assert!((area - 4.0 * PI).abs() < 1e-10);
     }
 
     #[test]
     fn test_sphere_volume() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 1.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 1.0);
         let vol = sphere.volume();
         assert!((vol - 4.0 * PI / 3.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_sphere_set_radius() {
-        let mut sphere = Sphere::from_ax3(Ax3::new(), 5.0);
+        let mut sphere = Sphere::from_ax3(Ax3::standard(), 5.0);
         sphere.set_radius(10.0);
         assert_eq!(sphere.radius(), 10.0);
     }
 
     #[test]
     fn test_sphere_direct() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 5.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 5.0);
         assert!(sphere.direct());
     }
 
     #[test]
     fn test_sphere_scale() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 5.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 5.0);
         let scaled = sphere.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.radius(), 10.0);
     }
 
     #[test]
     fn test_sphere_translate() {
-        let sphere = Sphere::from_ax3(Ax3::new(), 5.0);
+        let sphere = Sphere::from_ax3(Ax3::standard(), 5.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let trans = sphere.translated(&v);
         assert!((trans.location().x() - 1.0).abs() < 1e-10);

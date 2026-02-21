@@ -17,7 +17,7 @@ impl Elips {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax2::new(),
+            pos: Ax2::standard(),
             major_radius: f64::MAX,
             minor_radius: f64::MIN,
         }
@@ -113,7 +113,7 @@ impl Elips {
         let c = (self.major_radius * self.major_radius - self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.pos.x_direction();
+        let xdir = self.posxdirection();
         Pnt::from_coords(
             loc.x() + c * xdir.x(),
             loc.y() + c * xdir.y(),
@@ -126,7 +126,7 @@ impl Elips {
         let c = (self.major_radius * self.major_radius - self.minor_radius * self.minor_radius)
             .sqrt();
         let loc = self.pos.location();
-        let xdir = self.pos.x_direction();
+        let xdir = self.posxdirection();
         Pnt::from_coords(
             loc.x() - c * xdir.x(),
             loc.y() - c * xdir.y(),
@@ -146,13 +146,13 @@ impl Elips {
     /// Returns the X axis (major axis).
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis (minor axis).
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Rotate the ellipse.
@@ -215,35 +215,35 @@ mod tests {
 
     #[test]
     fn test_elips_basic() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         assert_eq!(elips.major_radius(), 5.0);
         assert_eq!(elips.minor_radius(), 3.0);
     }
 
     #[test]
     fn test_elips_area() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         let area = elips.area();
         assert!((area - PI * 5.0 * 3.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_elips_eccentricity() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         let e = elips.eccentricity();
         assert!(e > 0.0 && e < 1.0);
     }
 
     #[test]
     fn test_elips_focal() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         let f = elips.focal();
         assert!(f > 0.0);
     }
 
     #[test]
     fn test_elips_foci() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         let f1 = elips.focus1();
         let f2 = elips.focus2();
         assert_eq!(f1.x() > 0.0, f2.x() < 0.0);
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_elips_scale() {
-        let elips = Elips::from_ax2(Ax2::new(), 5.0, 3.0);
+        let elips = Elips::from_ax2(Ax2::standard(), 5.0, 3.0);
         let scaled = elips.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.major_radius(), 10.0);
         assert_eq!(scaled.minor_radius(), 6.0);

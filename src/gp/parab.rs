@@ -15,7 +15,7 @@ impl Parab {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax2::new(),
+            pos: Ax2::standard(),
             focal_length: f64::MAX,
         }
     }
@@ -71,7 +71,7 @@ impl Parab {
     /// Returns the focus point.
     pub fn focus(&self) -> Pnt {
         let loc = self.pos.location();
-        let xdir = self.pos.x_direction();
+        let xdir = self.posxdirection();
         Pnt::from_coords(
             loc.x() + self.focal_length * xdir.x(),
             loc.y() + self.focal_length * xdir.y(),
@@ -82,13 +82,13 @@ impl Parab {
     /// Returns the X axis (symmetry axis).
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis (parallel to directrix).
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Rotate the parabola.
@@ -148,33 +148,33 @@ mod tests {
 
     #[test]
     fn test_parab_basic() {
-        let parab = Parab::from_ax2(Ax2::new(), 5.0);
+        let parab = Parab::from_ax2(Ax2::standard(), 5.0);
         assert_eq!(parab.focal(), 5.0);
     }
 
     #[test]
     fn test_parab_parameter() {
-        let parab = Parab::from_ax2(Ax2::new(), 5.0);
+        let parab = Parab::from_ax2(Ax2::standard(), 5.0);
         assert_eq!(parab.parameter(), 10.0);
     }
 
     #[test]
     fn test_parab_focus() {
-        let parab = Parab::from_ax2(Ax2::new(), 5.0);
+        let parab = Parab::from_ax2(Ax2::standard(), 5.0);
         let focus = parab.focus();
         assert!((focus.x() - 5.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_parab_scale() {
-        let parab = Parab::from_ax2(Ax2::new(), 5.0);
+        let parab = Parab::from_ax2(Ax2::standard(), 5.0);
         let scaled = parab.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.focal(), 10.0);
     }
 
     #[test]
     fn test_parab_translate() {
-        let parab = Parab::from_ax2(Ax2::new(), 5.0);
+        let parab = Parab::from_ax2(Ax2::standard(), 5.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let trans = parab.translated(&v);
         assert!((trans.location().x() - 1.0).abs() < 1e-10);

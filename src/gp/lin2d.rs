@@ -103,7 +103,7 @@ mod tests {
     fn test_lin2d_new() {
         let line = Lin2d::new();
         assert_eq!(line.origin().x(), 0.0);
-        assert_eq!(line.direction().x(), 1.0);
+        assert_eq!(line.direction().x_val(), 1.0);
     }
 
     #[test]
@@ -112,7 +112,7 @@ mod tests {
         let p2 = Pnt2d::from_coords(3.0, 4.0);
         let line = Lin2d::from_two_points(p1, p2);
         assert_eq!(line.origin().x(), 0.0);
-        assert!((line.direction().x() - 0.6).abs() < 1e-10);
+        assert!((line.direction().x_val() - 0.6).abs() < 1e-10);
     }
 
     #[test]

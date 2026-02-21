@@ -117,7 +117,7 @@ impl Vec2d {
     /// Returns the angle (in radians) from positive X-axis.
     #[inline]
     pub fn angle(&self) -> f64 {
-        self.y.atan2(self.x)
+        self.xy.y().atan2(self.xy.x())
     }
 
     /// Reverses direction in place.
@@ -135,7 +135,7 @@ impl Vec2d {
     /// Adds another vector in place.
     #[inline]
     pub fn add(&mut self, other: &Vec2d) {
-        self.xy.add(&other.xy);
+        self.xy += other.xy;
     }
 
     /// Returns sum of vectors.

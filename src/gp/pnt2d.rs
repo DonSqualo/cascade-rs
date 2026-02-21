@@ -167,8 +167,8 @@ impl Pnt2d {
         let proj = v.xy().dot(&d) * 2.0;
         
         // Mirrored = origin + proj*direction - v
-        let dir_xy = d.multiplied(proj);
-        let mirrored_v = dir_xy.subtracted(&v.xy());
+        let scaled_d = d.multiplied(proj);
+        let mirrored_v = scaled_d.subtracted(&v.xy());
         
         self.coord.set_coord(
             origin.x() + mirrored_v.x(),

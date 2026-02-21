@@ -19,7 +19,7 @@ impl Pln {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax3::new(),
+            pos: Ax3::standard(),
         }
     }
 
@@ -123,13 +123,13 @@ impl Pln {
     /// Reverses the U parametrization (reverses the X axis).
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.pos.x_reverse();
+        self.posx_reverse();
     }
 
     /// Reverses the V parametrization (reverses the Y axis).
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.pos.y_reverse();
+        self.posy_reverse();
     }
 
     /// Returns true if the axis system is right-handed.
@@ -141,13 +141,13 @@ impl Pln {
     /// Returns the X axis of the plane.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis of the plane.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Computes the distance from the plane to a point.
@@ -174,7 +174,7 @@ impl Pln {
     pub fn signed_distance(&self, p: &Pnt) -> f64 {
         let loc = self.pos.location();
         let dir = self.pos.direction();
-        let v = Vec3::from_pnt_pnt(&loc, p);
+        let v = Vec3::from_points(&loc, p);
         v.dot(&dir.to_vec())
     }
 
@@ -494,7 +494,7 @@ mod tests {
         let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_xyz(0.0, 0.0, 1.0).unwrap());
         let pln_rot = pln.rotated(&ax, PI / 2.0);
 
-        assert!((pln_rot.position().direction().y() - 1.0).abs() < 1e-10);
+        assert!((pln_rot.position().direction().y_val() - 1.0).abs() < 1e-10);
     }
 
     #[test]
@@ -512,9 +512,9 @@ mod tests {
     #[test]
     fn test_pln_u_reverse() {
         let mut pln = Pln::new();
-        let old_xdir = pln.position().x_direction();
+        let old_xdir = pln.position()xdirection();
         pln.u_reverse();
-        let new_xdir = pln.position().x_direction();
+        let new_xdir = pln.position()xdirection();
 
         assert!((old_xdir.x() + new_xdir.x()).abs() < 1e-10);
     }
@@ -522,9 +522,9 @@ mod tests {
     #[test]
     fn test_pln_v_reverse() {
         let mut pln = Pln::new();
-        let old_ydir = pln.position().y_direction();
+        let old_ydir = pln.position()ydirection();
         pln.v_reverse();
-        let new_ydir = pln.position().y_direction();
+        let new_ydir = pln.position()ydirection();
 
         assert!((old_ydir.y() + new_ydir.y()).abs() < 1e-10);
     }
@@ -533,13 +533,13 @@ mod tests {
     fn test_pln_x_axis() {
         let pln = Pln::new();
         let x_axis = pln.x_axis();
-        assert!((x_axis.direction().x() - 1.0).abs() < 1e-10);
+        assert!((x_axis.direction().x_val() - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_pln_y_axis() {
         let pln = Pln::new();
         let y_axis = pln.y_axis();
-        assert!((y_axis.direction().y() - 1.0).abs() < 1e-10);
+        assert!((y_axis.direction().y_val() - 1.0).abs() < 1e-10);
     }
 }

@@ -15,7 +15,7 @@ impl Cylinder {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax3::new(),
+            pos: Ax3::standard(),
             radius: f64::MAX,
         }
     }
@@ -88,25 +88,25 @@ impl Cylinder {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Reverses the U parametrization (reverses Y axis).
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.pos.y_reverse();
+        self.posy_reverse();
     }
 
     /// Reverses the V parametrization (reverses Z axis).
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.pos.z_reverse();
+        self.posz_reverse();
     }
 
     /// Rotate the cylinder.
@@ -166,33 +166,33 @@ mod tests {
 
     #[test]
     fn test_cylinder_basic() {
-        let cyl = Cylinder::from_ax3(Ax3::new(), 5.0);
+        let cyl = Cylinder::from_ax3(Ax3::standard(), 5.0);
         assert_eq!(cyl.radius(), 5.0);
     }
 
     #[test]
     fn test_cylinder_set_radius() {
-        let mut cyl = Cylinder::from_ax3(Ax3::new(), 5.0);
+        let mut cyl = Cylinder::from_ax3(Ax3::standard(), 5.0);
         cyl.set_radius(10.0);
         assert_eq!(cyl.radius(), 10.0);
     }
 
     #[test]
     fn test_cylinder_direct() {
-        let cyl = Cylinder::from_ax3(Ax3::new(), 5.0);
+        let cyl = Cylinder::from_ax3(Ax3::standard(), 5.0);
         assert!(cyl.direct());
     }
 
     #[test]
     fn test_cylinder_scale() {
-        let cyl = Cylinder::from_ax3(Ax3::new(), 5.0);
+        let cyl = Cylinder::from_ax3(Ax3::standard(), 5.0);
         let scaled = cyl.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.radius(), 10.0);
     }
 
     #[test]
     fn test_cylinder_translate() {
-        let cyl = Cylinder::from_ax3(Ax3::new(), 5.0);
+        let cyl = Cylinder::from_ax3(Ax3::standard(), 5.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let trans = cyl.translated(&v);
         assert!((trans.location().x() - 1.0).abs() < 1e-10);

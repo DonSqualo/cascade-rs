@@ -18,7 +18,7 @@ impl Lin {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax1::new(),
+            pos: Ax1::from_pnt_dir(Pnt::new(), Dir::z()),
         }
     }
 
@@ -102,7 +102,7 @@ impl Lin {
     #[inline]
     pub fn square_distance(&self, p: &Pnt) -> f64 {
         let loc = self.location();
-        let mut v = Vec3::from_pnt_pnt(&loc, p);
+        let mut v = Vec3::from_points(&loc, p);
         v.cross(&self.direction().to_vec());
         v.square_magnitude()
     }
@@ -123,7 +123,7 @@ impl Lin {
         // Vector from one line to another
         let v1 = self.direction().to_vec();
         let v2 = other.direction().to_vec();
-        let w0 = Vec3::from_pnt_pnt(&self.location(), &other.location());
+        let w0 = Vec3::from_points(&self.location(), &other.location());
 
         let a = v1.dot(&v1);
         let b = v1.dot(&v2);
@@ -154,7 +154,7 @@ impl Lin {
     /// Raises if the distance is nearly zero (ambiguous case).
     pub fn normal(&self, p: &Pnt) -> Lin {
         let loc = self.location();
-        let v = Vec3::from_pnt_pnt(&loc, p);
+        let v = Vec3::from_points(&loc, p);
         let dir = self.direction();
 
         // Normal is perpendicular in the plane defined by the line and point
@@ -269,7 +269,7 @@ mod tests {
     fn test_lin_default() {
         let lin = Lin::new();
         assert_eq!(lin.location().x(), 0.0);
-        assert_eq!(lin.direction().x(), 0.0);
+        assert_eq!(lin.direction().x_val(), 0.0);
     }
 
     #[test]
@@ -287,7 +287,7 @@ mod tests {
     fn test_lin_direction() {
         let d = Dir::from_xyz(1.0, 0.0, 0.0).unwrap();
         let lin = Lin::from_pnt_dir(Pnt::new(), d);
-        assert!((lin.direction().x() - 1.0).abs() < 1e-10);
+        assert!((lin.direction().x_val() - 1.0).abs() < 1e-10);
     }
 
     #[test]
@@ -360,7 +360,7 @@ mod tests {
         let mut lin_rev = lin;
         lin_rev.reverse();
         
-        assert!((lin_rev.direction().x() + 1.0).abs() < 1e-10);
+        assert!((lin_rev.direction().x_val() + 1.0).abs() < 1e-10);
     }
 
     #[test]
@@ -436,8 +436,8 @@ mod tests {
         let lin_rot = lin.rotated(&ax, PI / 2.0);
         
         // After 90 degree rotation around Z, X direction becomes Y direction
-        assert!((lin_rot.direction().y() - 1.0).abs() < 1e-10);
-        assert!(lin_rot.direction().x().abs() < 1e-10);
+        assert!((lin_rot.direction().y_val() - 1.0).abs() < 1e-10);
+        assert!(lin_rot.direction().x_val().abs() < 1e-10);
     }
 
     #[test]

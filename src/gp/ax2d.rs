@@ -74,7 +74,7 @@ mod tests {
     fn test_ax2d_new() {
         let ax = Ax2d::new();
         assert_eq!(ax.origin().x(), 0.0);
-        assert_eq!(ax.direction().x(), 1.0);
+        assert_eq!(ax.direction().x_val(), 1.0);
     }
 
     #[test]
@@ -83,7 +83,7 @@ mod tests {
         let direction = Dir2d::from_coords(3.0, 4.0);
         let ax = Ax2d::from_origin_direction(origin, direction);
         assert_eq!(ax.origin().x(), 1.0);
-        assert!((ax.direction().x() - 0.6).abs() < 1e-10);
+        assert!((ax.direction().x_val() - 0.6).abs() < 1e-10);
     }
 
     #[test]

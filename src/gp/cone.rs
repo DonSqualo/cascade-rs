@@ -17,7 +17,7 @@ impl Cone {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax3::new(),
+            pos: Ax3::standard(),
             radius: f64::MAX,
             semi_angle: std::f64::consts::FRAC_PI_4,
         }
@@ -129,25 +129,25 @@ impl Cone {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Reverses the U parametrization.
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.pos.y_reverse();
+        self.posy_reverse();
     }
 
     /// Reverses the V parametrization.
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.pos.z_reverse();
+        self.posz_reverse();
         self.semi_angle = -self.semi_angle;
     }
 
@@ -208,34 +208,34 @@ mod tests {
 
     #[test]
     fn test_cone_basic() {
-        let cone = Cone::from_ax3(Ax3::new(), std::f64::consts::FRAC_PI_4, 5.0);
+        let cone = Cone::from_ax3(Ax3::standard(), std::f64::consts::FRAC_PI_4, 5.0);
         assert_eq!(cone.radius(), 5.0);
         assert_eq!(cone.semi_angle(), std::f64::consts::FRAC_PI_4);
     }
 
     #[test]
     fn test_cone_apex() {
-        let cone = Cone::from_ax3(Ax3::new(), std::f64::consts::FRAC_PI_4, 5.0);
+        let cone = Cone::from_ax3(Ax3::standard(), std::f64::consts::FRAC_PI_4, 5.0);
         let apex = cone.apex();
         assert!(apex.z() < 0.0); // apex should be below reference plane
     }
 
     #[test]
     fn test_cone_scale() {
-        let cone = Cone::from_ax3(Ax3::new(), std::f64::consts::FRAC_PI_4, 5.0);
+        let cone = Cone::from_ax3(Ax3::standard(), std::f64::consts::FRAC_PI_4, 5.0);
         let scaled = cone.scaled(&Pnt::new(), 2.0);
         assert_eq!(scaled.radius(), 10.0);
     }
 
     #[test]
     fn test_cone_direct() {
-        let cone = Cone::from_ax3(Ax3::new(), std::f64::consts::FRAC_PI_4, 5.0);
+        let cone = Cone::from_ax3(Ax3::standard(), std::f64::consts::FRAC_PI_4, 5.0);
         assert!(cone.direct());
     }
 
     #[test]
     fn test_cone_translate() {
-        let cone = Cone::from_ax3(Ax3::new(), std::f64::consts::FRAC_PI_4, 5.0);
+        let cone = Cone::from_ax3(Ax3::standard(), std::f64::consts::FRAC_PI_4, 5.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let trans = cone.translated(&v);
         assert!((trans.location().x() - 1.0).abs() < 1e-10);

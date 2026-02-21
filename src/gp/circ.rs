@@ -19,7 +19,7 @@ impl Circ {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            pos: Ax2::new(),
+            pos: Ax2::standard(),
             radius: f64::MAX,
         }
     }
@@ -62,13 +62,13 @@ impl Circ {
     /// Returns the X axis of the circle.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.x_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posxdirection())
     }
 
     /// Returns the Y axis of the circle.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.y_direction())
+        Ax1::from_pnt_dir(self.pos.location(), self.posydirection())
     }
 
     /// Sets the main axis (normal direction).
@@ -118,9 +118,9 @@ impl Circ {
     /// Computes the square distance from the circle to a point.
     #[inline]
     pub fn square_distance(&self, p: &Pnt) -> f64 {
-        let v = Vec3::from_pnt_pnt(&self.location(), p);
-        let x = v.dot(&self.pos.x_direction().to_vec());
-        let y = v.dot(&self.pos.y_direction().to_vec());
+        let v = Vec3::from_points(&self.location(), p);
+        let x = v.dot(&self.posxdirection().to_vec());
+        let y = v.dot(&self.posydirection().to_vec());
         let z = v.dot(&self.pos.direction().to_vec());
         let t = (x * x + y * y).sqrt() - self.radius;
         t * t + z * z
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_circ_from_ax2_radius() {
-        let ax2 = Ax2::new();
+        let ax2 = Ax2::standard();
         let circ = Circ::from_ax2_radius(ax2, 5.0);
 
         assert!((circ.radius() - 5.0).abs() < 1e-10);
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_circ_set_radius() {
-        let mut circ = Circ::from_ax2_radius(Ax2::new(), 3.0);
+        let mut circ = Circ::from_ax2_radius(Ax2::standard(), 3.0);
         circ.set_radius(7.0);
 
         assert!((circ.radius() - 7.0).abs() < 1e-10);
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_circ_area() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 1.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 1.0);
         let area = circ.area();
 
         assert!((area - PI).abs() < 1e-10);
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_circ_length() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 1.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 1.0);
         let length = circ.length();
 
         assert!((length - 2.0 * PI).abs() < 1e-10);
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_circ_distance_to_point_on_circle() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let p = Pnt::from_coords(5.0, 0.0, 0.0);
 
         let dist = circ.distance(&p);
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_circ_distance_to_point_inside() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let p = Pnt::from_coords(2.0, 0.0, 0.0);
 
         let dist = circ.distance(&p);
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_circ_distance_to_point_outside() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let p = Pnt::from_coords(8.0, 0.0, 0.0);
 
         let dist = circ.distance(&p);
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_circ_contains() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let p = Pnt::from_coords(5.0, 0.0, 0.0);
 
         assert!(circ.contains(&p, precision::CONFUSION));
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_circ_set_location() {
-        let mut circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let mut circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let p = Pnt::from_coords(1.0, 2.0, 3.0);
         circ.set_location(p);
 
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_circ_translate() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let v = Vec3::from_coords(1.0, 2.0, 3.0);
         let circ_trans = circ.translated(&v);
 
@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn test_circ_scale() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let circ_scaled = circ.scaled(&Pnt::new(), 2.0);
 
         assert!((circ_scaled.radius() - 10.0).abs() < 1e-10);
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_circ_rotated() {
-        let ax2 = Ax2::new();
+        let ax2 = Ax2::standard();
         let circ = Circ::from_ax2_radius(ax2, 5.0);
         let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_xyz(0.0, 0.0, 1.0).unwrap());
         let circ_rot = circ.rotated(&ax, PI / 2.0);
@@ -359,18 +359,18 @@ mod tests {
 
     #[test]
     fn test_circ_x_axis() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let x_axis = circ.x_axis();
 
-        assert!((x_axis.direction().x() - 1.0).abs() < 1e-10);
+        assert!((x_axis.direction().x_val() - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_circ_y_axis() {
-        let circ = Circ::from_ax2_radius(Ax2::new(), 5.0);
+        let circ = Circ::from_ax2_radius(Ax2::standard(), 5.0);
         let y_axis = circ.y_axis();
 
-        assert!((y_axis.direction().y() - 1.0).abs() < 1e-10);
+        assert!((y_axis.direction().y_val() - 1.0).abs() < 1e-10);
     }
 }
 
