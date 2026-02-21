@@ -652,7 +652,7 @@ impl IgesParser {
 }
 
 struct IgesWriter {
-    entities: Vec<IgesEntity>,
+    entities: Vec<(IgesEntity, u32)>, // (Entity, Layer number)
 }
 
 impl IgesWriter {
@@ -663,20 +663,67 @@ impl IgesWriter {
     }
     
     fn add_shape(&mut self, shape: &Shape) -> Result<()> {
+        self.add_shape_with_layer(shape, 0)
+    }
+    
+    fn add_shape_with_layer(&mut self, shape: &Shape, layer: u32) -> Result<()> {
         match shape {
             Shape::Vertex(v) => {
-                self.entities.push(IgesEntity::Point {
+                self.entities.push((IgesEntity::Point {
                     coords: v.point,
-                });
+                }, layer));
             }
             Shape::Edge(e) => {
-                self.entities.push(IgesEntity::Line {
+                self.entities.push((IgesEntity::Line {
                     start: e.start.point,
                     end: e.end.point,
-                });
+                }, layer));
             }
             _ => {
                 return Err(CascadeError::NotImplemented("IGES write for this shape type".into()));
+            }
+        }
+        Ok(())
+    }
+    
+    fn add_solid_with_layer(&mut self, solid: &crate::brep::Solid, layer: u32) -> Result<()> {
+        // Add all faces from outer shell
+        for face in &solid.outer_shell.faces {
+            // Add edges from outer wire
+            for edge in &face.outer_wire.edges {
+                self.entities.push((IgesEntity::Line {
+                    start: edge.start.point,
+                    end: edge.end.point,
+                }, layer));
+            }
+            // Add edges from inner wires (holes)
+            for inner_wire in &face.inner_wires {
+                for edge in &inner_wire.edges {
+                    self.entities.push((IgesEntity::Line {
+                        start: edge.start.point,
+                        end: edge.end.point,
+                    }, layer));
+                }
+            }
+        }
+        
+        // Add all faces from inner shells (voids)
+        for shell in &solid.inner_shells {
+            for face in &shell.faces {
+                for edge in &face.outer_wire.edges {
+                    self.entities.push((IgesEntity::Line {
+                        start: edge.start.point,
+                        end: edge.end.point,
+                    }, layer));
+                }
+                for inner_wire in &face.inner_wires {
+                    for edge in &inner_wire.edges {
+                        self.entities.push((IgesEntity::Line {
+                            start: edge.start.point,
+                            end: edge.end.point,
+                        }, layer));
+                    }
+                }
             }
         }
         Ok(())
@@ -694,10 +741,19 @@ impl IgesWriter {
         content.push_str("1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0  G      3\n");
         
         // Directory (D) section
+        // Validate layer numbers (IGES standard: 0-65535)
+        for (_entity, layer) in &self.entities {
+            if *layer > 65535 {
+                return Err(CascadeError::InvalidGeometry(
+                    format!("Layer number {} exceeds IGES maximum of 65535", layer)
+                ));
+            }
+        }
+        
         let mut entity_id = 1i32;
         let mut param_idx = 1i32;
         
-        for entity in &self.entities {
+        for (entity, layer) in &self.entities {
             let entity_type = match entity {
                 IgesEntity::Point { .. } => 116,
                 IgesEntity::Line { .. } => 110,
@@ -707,9 +763,11 @@ impl IgesWriter {
                 _ => continue,
             };
             
+            // Format directory line 1: IGES-compliant format
+            // Field 5 (bytes 33-40) is the Level/Layer field  
             let line1 = format!(
-                "{:8}   {:8}  {:8}  {:8}  {:8}  {:8}  {:8}  {:8}  {:8}                  D      {}\n",
-                entity_type, param_idx, 0, 2, 0, 0, 0, 0, 0, entity_id * 2 - 1
+                "{:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}                  D      {}\n",
+                entity_type, param_idx, 0, 2, layer, 0, 0, 0, 0, entity_id * 2 - 1
             );
             content.push_str(&line1);
             
@@ -722,9 +780,10 @@ impl IgesWriter {
                 _ => 0,
             };
             
+            // Directory line 2: Status fields
             let line2 = format!(
-                "{:8}  {:8}  {:8}  {:8}                                                      D      {}\n",
-                0, 0, 0, 0, entity_id * 2
+                "{:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}                  D      {}\n",
+                0, 0, 0, 0, 0, 0, 0, 0, 0, entity_id * 2
             );
             content.push_str(&line2);
             
@@ -736,7 +795,7 @@ impl IgesWriter {
         let mut record_num = 1i32;
         let mut param_str = String::new();
         
-        for entity in &self.entities {
+        for (entity, _layer) in &self.entities {
             match entity {
                 IgesEntity::Point { coords } => {
                     param_str.push_str(&format!("{},{},{},", coords[0], coords[1], coords[2]));
@@ -793,4 +852,43 @@ impl IgesWriter {
         
         Ok(())
     }
+}
+
+/// Write multiple Solids to IGES format, each with an optional layer number
+/// 
+/// Each solid can be assigned to a specific layer for organization in CAD applications.
+/// Layer numbers range from 0-65535 per IGES specification. If no layer is specified,
+/// the solid will be assigned to layer 0 (default).
+/// 
+/// # Arguments
+/// * `solids` - Slice of (Solid reference, optional layer number) tuples
+/// * `path` - Output file path
+/// 
+/// # Returns
+/// * `Result<()>` - Ok if successful, error otherwise
+/// 
+/// # Example
+/// ```ignore
+/// let solid1 = make_box(1.0, 2.0, 3.0)?;
+/// let solid2 = make_cylinder(1.0, 5.0)?;
+/// let solids = vec![(&solid1, Some(1)), (&solid2, Some(2))];
+/// write_iges_with_layers(&solids, "output.igs")?;
+/// ```
+pub fn write_iges_with_layers(solids: &[(&crate::brep::Solid, Option<u32>)], path: &str) -> Result<()> {
+    let mut writer = IgesWriter::new();
+    
+    for (solid, layer_opt) in solids {
+        let layer = layer_opt.unwrap_or(0);
+        
+        // Validate layer number (IGES standard: 0-65535)
+        if layer > 65535 {
+            return Err(CascadeError::InvalidGeometry(
+                format!("Layer number {} exceeds IGES maximum of 65535", layer)
+            ));
+        }
+        
+        writer.add_solid_with_layer(solid, layer)?;
+    }
+    
+    writer.write_file(path)
 }

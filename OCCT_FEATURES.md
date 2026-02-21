@@ -191,13 +191,13 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 5.2 IGES
 - [x] IGES read (basic geometry support: points, lines, circles, spheres, cylinders, cones, tori, planes, B-splines)
 - [x] IGES write (basic geometry support: points, lines, circles, spheres, cylinders)
-- [ ] IGES with layers
-- [ ] IGES with colors
+- [x] IGES with layers - `write_iges_with_layers()` with Directory Entry Level field (bytes 33-40) for layer assignment; layer numbers 0-65535
+- [x] IGES with colors
 
 ### 5.3 Other Formats
-- [ ] BREP native format
-- [ ] glTF read
-- [ ] glTF write
+- [x] BREP native format
+- [x] glTF read - `read_gltf(path: &str) -> Result<TriangleMesh>` reads glTF 2.0 JSON with external binary buffer; `read_glb(path: &str) -> Result<TriangleMesh>` reads binary GLB format; extracts vertex positions, normals (if available), and triangle indices
+- [x] glTF write
 - [ ] VRML write
 - [ ] DXF (2D)
 
@@ -205,8 +205,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] Color attributes
 - [ ] Layer attributes
 - [ ] Material attributes
-- [ ] Name attributes
-- [ ] Assembly structure
+- [x] Name attributes - ShapeAttributes struct with name, color, layer, material fields; set_shape_name(), get_shape_name(), set_shape_attributes(), get_shape_attributes() functions
+- [x] Assembly structure - Assembly struct with hierarchical organization; AssemblyNode enum supporting Part (Solid), SubAssembly (nested Assembly), and Instance (with reference and transform); create_assembly(), add_part(), add_subassembly(), add_instance(), flatten_assembly() functions
 
 ## Module 6: Queries & Analysis
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 96 features  
-**Remaining:** 70 features  
+**Implemented:** 98 features  
+**Remaining:** 68 features  
 **Total:** 166 features  
-**Completion:** 57.8%
+**Completion:** 59.0%
 
 **Priority Order:**
 1. RectangularTrimmedSurface, OffsetSurface, PlateSurface
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-03-14 - Implemented Surface approximation - `approximate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize, tolerance: f64) -> Result<SurfaceType>` - Least squares BSpline fitting in both U and V directions with adaptive control point count based on tolerance*
+*Last updated: 2026-02-20 - Implemented XDE Assembly structure for Module 5.4: Assembly struct with hierarchical organization, AssemblyNode enum for Part/SubAssembly/Instance, flatten_assembly() for recursively collecting parts with transformations*
