@@ -47,6 +47,11 @@ impl Ax3 {
         Self::from_ax2(&a2)
     }
 
+    /// Creates from direction at origin (right-handed).
+    pub fn from_dir(n: Dir) -> Self {
+        Self::new(Pnt::new(), n)
+    }
+
     /// Creates from point, N direction, and X direction.
     pub fn new_with_x(p: Pnt, n: Dir, vx: Dir) -> Self {
         let a2 = Ax2::new_with_x(p, n, vx);
@@ -149,6 +154,18 @@ impl Ax3 {
 
     /// Reverses handedness.
     pub fn reverse(&mut self) {
+        self.vydir.reverse();
+        self.direct = !self.direct;
+    }
+
+    /// Reverses X direction.
+    pub fn x_reverse(&mut self) {
+        self.vxdir.reverse();
+        self.direct = !self.direct;
+    }
+
+    /// Reverses Y direction.
+    pub fn y_reverse(&mut self) {
         self.vydir.reverse();
         self.direct = !self.direct;
     }

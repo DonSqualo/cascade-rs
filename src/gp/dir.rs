@@ -98,15 +98,33 @@ impl Dir {
         self.coord.x()
     }
 
+    /// Returns X component (alias for x_val).
+    #[inline]
+    pub const fn x(&self) -> f64 {
+        self.coord.x()
+    }
+
     /// Returns Y component.
     #[inline]
     pub const fn y_val(&self) -> f64 {
         self.coord.y()
     }
 
+    /// Returns Y component (alias for y_val).
+    #[inline]
+    pub const fn y(&self) -> f64 {
+        self.coord.y()
+    }
+
     /// Returns Z component.
     #[inline]
     pub const fn z_val(&self) -> f64 {
+        self.coord.z()
+    }
+
+    /// Returns Z component (alias for z_val).
+    #[inline]
+    pub const fn z(&self) -> f64 {
         self.coord.z()
     }
 

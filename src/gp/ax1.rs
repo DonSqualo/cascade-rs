@@ -48,6 +48,11 @@ impl Ax1 {
         Self { loc: p, vdir: v }
     }
 
+    /// Creates an axis from point and direction (alias).
+    pub const fn from_pnt_dir(p: Pnt, v: Dir) -> Self {
+        Self { loc: p, vdir: v }
+    }
+
     /// Sets the direction.
     #[inline]
     pub fn set_direction(&mut self, v: Dir) {

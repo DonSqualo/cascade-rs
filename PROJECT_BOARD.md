@@ -1,135 +1,162 @@
-# CASCADE-RS: OCCT Test-Driven Port
+# CASCADE-RS: OCCT Line-by-Line Port
 
-**Method:** Extract OCCT GTests → Implement Rust that passes them
+**Method:** Read C++ source + GTests as baseline → Write comprehensive Rust tests → Implement
 **Source:** /home/heim/projects/occt-source
-**Tests:** 251 test files, 100K+ lines of test specifications
+**Tracking:** This file is the memory system. Sub-agents update here.
 
 ---
 
-## Progress Overview
+## Active Sub-Agents
 
-| Layer | Package | OCCT Lines | Rust Lines | Tests | Status |
-|-------|---------|------------|------------|-------|--------|
-| 0 | precision | ~400 | 91 | 2/2 | ✅ Complete |
-| 0 | gp (primitives) | ~15,000 | 5,500+ | 48/48 | ✅ Core Complete |
-| 1 | Bnd | ~5,000 | - | 0/268 | 🔴 Not started |
-| 1 | math | ~30,000 | - | 0/? | 🔴 Not started |
-| 2 | Geom | ~50,000 | - | 0/? | 🔴 Not started |
+| Agent | Package | Started | Status | Tests |
+|-------|---------|---------|--------|-------|
+| port-gp-3d-geom | Pln,Lin,Circ,Cylinder,etc | 10:32 UTC | 🟡 Running | - |
+| port-bnd | Bnd_Box,Bnd_Sphere,etc | 10:32 UTC | 🟡 Running | - |
+| port-gp-2d | XY,Pnt2d,Vec2d,etc | 10:32 UTC | 🟡 Running | - |
 
 ---
 
-## Completed (Layer 0)
+## Layer 0: Foundation (REQUIRED FIRST)
 
-### precision ✅
-Port of: `src/FoundationClasses/TKernel/Precision/`
-- All OCCT precision constants (ANGULAR, CONFUSION, etc.)
-- 2 tests passing
+### precision ✅ COMPLETE
+- Source: `TKernel/Precision/`
+- Tests: 2/2
+- All constants ported
 
-### gp (geometric primitives) ✅
-Port of: `src/FoundationClasses/TKMath/gp/`
+### gp ✅ CORE COMPLETE (61 tests)
+Remaining types to port:
 
-| Class | Source | Rust | Tests | Status |
-|-------|--------|------|-------|--------|
-| XYZ | gp_XYZ.hxx | xyz.rs | 18/18 | ✅ |
-| Pnt | gp_Pnt.hxx | pnt.rs | 5/5 | ✅ |
-| Vec | gp_Vec.hxx | vec.rs | 4/4 | ✅ |
-| Dir | gp_Dir.hxx | dir.rs | 7/7 | ✅ |
-| Mat | gp_Mat.hxx | mat.rs | 3/3 | ✅ |
-| Ax1 | gp_Ax1.hxx | ax1.rs | 3/3 | ✅ |
-| Ax2 | gp_Ax2.hxx | ax2.rs | 2/2 | ✅ |
-| Ax3 | gp_Ax3.hxx | ax3.rs | 3/3 | ✅ |
-| Trsf | gp_Trsf.hxx | trsf.rs | 5/5 | ✅ |
-
-**OCC23361 test case passing:** Transformation composition verified.
-
----
-
-## Next Up (Layer 0-1)
-
-### gp remaining types
-- [ ] gp_Pln (Plane)
-- [ ] gp_Lin (Line)
-- [ ] gp_Circ (Circle)
-- [ ] gp_Elips (Ellipse)
-- [ ] gp_Hypr (Hyperbola)
-- [ ] gp_Parab (Parabola)
-- [ ] gp_Cylinder
-- [ ] gp_Cone
-- [ ] gp_Sphere
-- [ ] gp_Torus
-- [ ] gp_GTrsf (General transformation)
-- [ ] 2D variants (Pnt2d, Vec2d, Dir2d, etc.)
-
-### Bnd (Bounding boxes)
-Source: `src/FoundationClasses/TKMath/Bnd/`
-- [ ] Bnd_Box
-- [ ] Bnd_Box2d
-- [ ] Bnd_Sphere
-- [ ] Bnd_OBB
-- [ ] Bnd_Range
-- [ ] BndLib
-
-### math (Numerical algorithms)
-Source: `src/FoundationClasses/TKMath/math/`
-Heavy lifting - will need sub-agents.
+| Type | Source | Status | Tests |
+|------|--------|--------|-------|
+| XYZ | gp_XYZ.hxx | ✅ | 28 |
+| Pnt | gp_Pnt.hxx | ✅ | 5 |
+| Vec | gp_Vec.hxx | ✅ | 4 |
+| Dir | gp_Dir.hxx | ✅ | 7 |
+| Mat | gp_Mat.hxx | ✅ | 3 |
+| Ax1 | gp_Ax1.hxx | ✅ | 3 |
+| Ax2 | gp_Ax2.hxx | ✅ | 2 |
+| Ax3 | gp_Ax3.hxx | ✅ | 3 |
+| Trsf | gp_Trsf.hxx | ✅ | 5 |
+| Pln | gp_Pln.hxx | 🔴 | 0 |
+| Lin | gp_Lin.hxx | 🔴 | 0 |
+| Circ | gp_Circ.hxx | 🔴 | 0 |
+| Elips | gp_Elips.hxx | 🔴 | 0 |
+| Hypr | gp_Hypr.hxx | 🔴 | 0 |
+| Parab | gp_Parab.hxx | 🔴 | 0 |
+| Cylinder | gp_Cylinder.hxx | 🔴 | 0 |
+| Cone | gp_Cone.hxx | 🔴 | 0 |
+| Sphere | gp_Sphere.hxx | 🔴 | 0 |
+| Torus | gp_Torus.hxx | 🔴 | 0 |
+| GTrsf | gp_GTrsf.hxx | 🔴 | 0 |
+| Pnt2d | gp_Pnt2d.hxx | 🔴 | 0 |
+| Vec2d | gp_Vec2d.hxx | 🔴 | 0 |
+| Dir2d | gp_Dir2d.hxx | 🔴 | 0 |
+| Mat2d | gp_Mat2d.hxx | 🔴 | 0 |
+| Trsf2d | gp_Trsf2d.hxx | 🔴 | 0 |
+| Ax2d | gp_Ax2d.hxx | 🔴 | 0 |
+| Ax22d | gp_Ax22d.hxx | 🔴 | 0 |
+| Lin2d | gp_Lin2d.hxx | 🔴 | 0 |
+| Circ2d | gp_Circ2d.hxx | 🔴 | 0 |
+| Elips2d | gp_Elips2d.hxx | 🔴 | 0 |
+| Hypr2d | gp_Hypr2d.hxx | 🔴 | 0 |
+| Parab2d | gp_Parab2d.hxx | 🔴 | 0 |
 
 ---
 
-## Test Extraction
+## Layer 1: Math & Bounds
 
-```bash
-# Extract tests for a package
-python3 scripts/extract_tests.py <Package>
+### Bnd (Bounding Boxes)
+- Source: `TKMath/Bnd/`
+- GTests: 268 tests in 8 files
+- Status: 🔴 NOT STARTED
 
-# Example: Bnd tests
-python3 scripts/extract_tests.py Bnd
-# Found 268 tests
+| Class | Lines | Status |
+|-------|-------|--------|
+| Bnd_Box | ~800 | 🔴 |
+| Bnd_Box2d | ~400 | 🔴 |
+| Bnd_Sphere | ~200 | 🔴 |
+| Bnd_OBB | ~600 | 🔴 |
+| Bnd_Range | ~150 | 🔴 |
+| Bnd_B2f/B2d | ~200 | 🔴 |
+| Bnd_B3f/B3d | ~200 | 🔴 |
 
-# Run gp tests
-cargo test --lib -- gp
+### math (Numerical Algorithms)
+- Source: `TKMath/math/`
+- ~30,000 lines
+- Status: 🔴 NOT STARTED
+
+### BSplCLib (B-Spline Curves)
+- Source: `TKMath/BSplCLib/`
+- ~15,000 lines
+- Status: 🔴 NOT STARTED
+
+### BSplSLib (B-Spline Surfaces)
+- Source: `TKMath/BSplSLib/`
+- ~10,000 lines
+- Status: 🔴 NOT STARTED
+
+---
+
+## Sub-Agent Task Template
+
+```
+## Task: Port OCCT package <PACKAGE>
+
+### Setup
+cd /home/heim/projects/cascade-rs
+git checkout -b port/<package>
+
+### Sources
+OCCT: /home/heim/projects/occt-source/src/.../<PACKAGE>/
+GTests: /home/heim/projects/occt-source/src/.../GTests/<PACKAGE>*_Test.cxx
+
+### Method
+1. Read ALL .hxx files - document every method
+2. Read GTests as baseline behavior specs
+3. Create src/<package>/mod.rs
+4. Write Rust tests for EVERY method
+5. Implement until tests pass
+6. Run: cargo test --lib -- <package>
+
+### Output
+Update PROJECT_BOARD.md with:
+- Status change
+- Test count
+- Any Chesterton's Fence notes
+
+### Completion
+git add -A && git commit -m "feat(<package>): Port from OCCT"
 ```
 
 ---
 
-## Sub-Agent Tasks
+## Chesterton's Fence Notes
 
-For parallel porting, spawn sub-agents with:
+Document anything suspicious that might be intentional:
 
-```
-Task: Port OCCT package <X> to cascade-rs
+### gp
+- `Trsf::Transform` special-cases Identity/Translation/Scale/PntMirror - optimization
+- `Resolution()` = DBL_MIN, different from `Confusion()` = 1e-7
 
-1. Read OCCT source: /home/heim/projects/occt-source/src/.../X/
-2. Extract tests: python3 scripts/extract_tests.py X
-3. Create src/<x>/mod.rs matching OCCT structure
-4. Implement until tests pass: cargo test --lib -- <x>
-5. Update PROJECT_BOARD.md with progress
-
-Workspace: /home/heim/projects/cascade-rs
-Branch: git checkout -b port/<package>
-```
-
----
-
-## Notes (Chesterton's Fence)
-
-Document anything that looks weird but might be intentional:
-
-### gp package
-- **gp_Trsf::Transform**: Has special-case handling for Identity, Translation, Scale, PntMirror - optimization, keep it
-- **Dir normalization**: Always normalizes on construction - this is intentional for unit vector guarantee
-
-### Bnd package
+### Bnd
 - (pending)
 
 ---
 
-## Integration Test: STEP Files
+## Commands
 
-Final validation: load real-world STEP files.
+```bash
+# Extract GTests for package
+python3 scripts/extract_tests.py <Package>
 
-Location: `test_corpus/`
+# Run tests for package  
+cargo test --lib -- <package>
+
+# Count methods in header
+grep -c "^\s*\(void\|double\|bool\|gp_\)" <file>.hxx
+```
 
 ---
 
-*Last updated: 2026-02-21*
-*Layer 0 (gp, precision) complete: 50 tests passing*
+*Last updated: 2025-02-21 10:32 UTC*
+*Total tests: 61 (gp) + legacy*
