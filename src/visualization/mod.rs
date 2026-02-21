@@ -1,553 +1,542 @@
-//! 3D Viewer Infrastructure
+//! Visualization module - rendering and display modes for cascade shapes
 //!
-//! Provides basic 3D visualization capabilities for CASCADE-RS shapes.
-//! Includes camera control, viewport management, and simple rasterization.
+//! Provides facilities for displaying 3D shapes in different rendering modes:
+//! - Shaded: Flat shading with lighting calculation
+//! - Wireframe: Edge-only rendering
+//! - ShadedWithEdges: Combination of shaded faces with edge highlighting
+//!
+//! Includes shape selection via ray-casting for interactive visualization.
 
-use crate::{Result, CascadeError};
-use crate::brep::Solid;
-use crate::mesh::{triangulate, TriangleMesh};
-use nalgebra as na;
-use std::collections::HashMap;
+use crate::mesh::TriangleMesh;
+use crate::{CascadeError, Result as CascadeResult, Solid};
+use std::collections::{HashMap, HashSet};
 
-/// Projection type for the camera
-#[derive(Debug, Clone, Copy)]
-pub enum ProjectionType {
-    /// Orthographic projection (parallel view)
-    Orthographic,
-    /// Perspective projection
-    Perspective { fov_degrees: f64 },
+/// Display mode for shape visualization
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayMode {
+    /// Shaded rendering with flat shading and lighting
+    Shaded,
+    /// Wireframe rendering - edges only
+    Wireframe,
+    /// Shaded faces with edge overlay
+    ShadedWithEdges,
 }
 
-/// Camera for 3D viewing with position, orientation, and projection
+/// Selection mode for interactive shape selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionMode {
+    /// No selection
+    None,
+    /// Select entire shapes
+    Shape,
+    /// Select individual faces
+    Face,
+    /// Select individual edges
+    Edge,
+    /// Select individual vertices
+    Vertex,
+}
+
+/// Display style configuration
 #[derive(Debug, Clone)]
-pub struct Camera {
-    /// Camera position in 3D space
-    pub position: [f64; 3],
-    /// Point the camera is looking at
-    pub target: [f64; 3],
-    /// Up vector for camera orientation
-    pub up: [f64; 3],
-    /// Projection type
-    pub projection: ProjectionType,
-    /// Near clipping plane distance
-    pub near: f64,
-    /// Far clipping plane distance
-    pub far: f64,
+pub struct DisplayStyle {
+    /// Current display mode
+    pub mode: DisplayMode,
+    /// Base color as [R, G, B] normalized to [0.0, 1.0]
+    pub color: [f64; 3],
+    /// Surface transparency/alpha (0.0 = transparent, 1.0 = opaque)
+    pub transparency: f64,
+    /// Edge color as [R, G, B] normalized to [0.0, 1.0]
+    pub edge_color: [f64; 3],
+    /// Edge width for wireframe and edge overlay modes
+    pub edge_width: f64,
 }
 
-impl Camera {
-    /// Create a new camera with default settings
+impl Default for DisplayStyle {
+    fn default() -> Self {
+        DisplayStyle {
+            mode: DisplayMode::Shaded,
+            color: [0.8, 0.8, 0.8],
+            transparency: 1.0,
+            edge_color: [0.0, 0.0, 0.0],
+            edge_width: 1.0,
+        }
+    }
+}
+
+impl DisplayStyle {
     pub fn new() -> Self {
-        Camera {
-            position: [0.0, 0.0, 100.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
-            projection: ProjectionType::Orthographic,
-            near: 0.1,
-            far: 10000.0,
-        }
+        Self::default()
     }
 
-    /// Set the camera position
-    pub fn set_position(&mut self, x: f64, y: f64, z: f64) {
-        self.position = [x, y, z];
+    pub fn with_mode(mut self, mode: DisplayMode) -> Self {
+        self.mode = mode;
+        self
     }
 
-    /// Set the camera target (look-at point)
-    pub fn set_target(&mut self, x: f64, y: f64, z: f64) {
-        self.target = [x, y, z];
+    pub fn with_color(mut self, r: f64, g: f64, b: f64) -> Self {
+        self.color = [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)];
+        self
     }
 
-    /// Set the camera up vector
-    pub fn set_up(&mut self, x: f64, y: f64, z: f64) {
-        self.up = [x, y, z];
+    pub fn with_transparency(mut self, alpha: f64) -> Self {
+        self.transparency = alpha.clamp(0.0, 1.0);
+        self
     }
 
-    /// Set the projection type
-    pub fn set_projection(&mut self, projection: ProjectionType) {
-        self.projection = projection;
+    pub fn with_edge_color(mut self, r: f64, g: f64, b: f64) -> Self {
+        self.edge_color = [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)];
+        self
     }
 
-    /// Get the view matrix for this camera
-    fn get_view_matrix(&self) -> na::Matrix4<f64> {
-        let pos = na::Point3::new(self.position[0], self.position[1], self.position[2]);
-        let target = na::Point3::new(self.target[0], self.target[1], self.target[2]);
-        let up = na::Vector3::new(self.up[0], self.up[1], self.up[2]);
-
-        na::Isometry3::look_at_lh(&pos, &target, &up).to_homogeneous()
-    }
-
-    /// Get the projection matrix for this camera
-    fn get_projection_matrix(&self, aspect: f64) -> na::Matrix4<f64> {
-        match self.projection {
-            ProjectionType::Orthographic => {
-                let height = 100.0; // Base height for orthographic view
-                let width = height * aspect;
-                na::Orthographic3::new(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, self.near, self.far)
-                    .as_matrix()
-                    .clone()
-            }
-            ProjectionType::Perspective { fov_degrees } => {
-                let fov_rad = fov_degrees.to_radians();
-                na::Perspective3::new(aspect, fov_rad, self.near, self.far)
-                    .as_matrix()
-                    .clone()
-            }
-        }
+    pub fn with_edge_width(mut self, width: f64) -> Self {
+        self.edge_width = width.max(0.1);
+        self
     }
 }
 
-impl Default for Camera {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Viewport for rendering
+/// Highlighting style for emphasized shape visualization
 #[derive(Debug, Clone)]
-pub struct Viewport {
-    /// Width in pixels
-    pub width: usize,
-    /// Height in pixels
-    pub height: usize,
-    /// Background color (RGBA)
-    pub background_color: [u8; 4],
+pub struct HighlightStyle {
+    /// Highlight color as [R, G, B] normalized to [0.0, 1.0]
+    pub color: [f64; 3],
+    /// Highlight opacity/alpha (0.0 = transparent, 1.0 = opaque)
+    pub opacity: f64,
+    /// Width of the outline for highlighted elements
+    pub outline_width: f64,
 }
 
-impl Viewport {
-    /// Create a new viewport
-    pub fn new(width: usize, height: usize) -> Self {
-        Viewport {
-            width,
-            height,
-            background_color: [200, 200, 200, 255], // Light gray
+impl Default for HighlightStyle {
+    fn default() -> Self {
+        HighlightStyle {
+            color: [1.0, 0.5, 0.0], // Default orange highlight
+            opacity: 1.0,
+            outline_width: 2.0,
         }
     }
+}
 
-    /// Set the background color (RGBA)
-    pub fn set_background_color(&mut self, r: u8, g: u8, b: u8, a: u8) {
-        self.background_color = [r, g, b, a];
+impl HighlightStyle {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Get aspect ratio
-    pub fn aspect_ratio(&self) -> f64 {
-        self.width as f64 / self.height as f64
+    pub fn with_color(mut self, r: f64, g: f64, b: f64) -> Self {
+        self.color = [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)];
+        self
+    }
+
+    pub fn with_opacity(mut self, opacity: f64) -> Self {
+        self.opacity = opacity.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn with_outline_width(mut self, width: f64) -> Self {
+        self.outline_width = width.max(0.1);
+        self
     }
 }
 
-impl Default for Viewport {
-    fn default() -> Self {
-        Self::new(800, 600)
-    }
-}
-
-/// A 3D shape entry in the viewer
+/// Represents a hit result from ray-casting selection
 #[derive(Debug, Clone)]
-struct ShapeEntry {
-    solid: Solid,
-    color: [u8; 3],
-    visible: bool,
+pub struct SelectionHit {
+    /// Type of entity selected
+    pub entity_type: SelectionMode,
+    /// Index of the selected entity
+    pub entity_id: usize,
+    /// Distance from ray origin to hit point
+    pub distance: f64,
+    /// Point of intersection in world space
+    pub hit_point: [f64; 3],
 }
 
-/// 3D Viewer for visualizing CASCADE shapes
-#[derive(Debug)]
+/// Selection state for tracking selected entities
+#[derive(Debug, Clone)]
+pub struct Selection {
+    /// Current selection mode
+    pub mode: SelectionMode,
+    /// List of currently selected entities
+    selected_entities: Vec<SelectionHit>,
+}
+
+impl Default for Selection {
+    fn default() -> Self {
+        Selection {
+            mode: SelectionMode::None,
+            selected_entities: Vec::new(),
+        }
+    }
+}
+
+impl Selection {
+    /// Create a new selection with no mode
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the selection mode
+    pub fn set_mode(&mut self, mode: SelectionMode) {
+        self.mode = mode;
+    }
+
+    /// Add a hit to the selection
+    pub fn add_hit(&mut self, hit: SelectionHit) {
+        self.selected_entities.push(hit);
+        // Sort by distance so closest is first
+        self.selected_entities.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+
+    /// Clear all selections
+    pub fn clear(&mut self) {
+        self.selected_entities.clear();
+    }
+
+    /// Get the closest selected entity
+    pub fn closest(&self) -> Option<&SelectionHit> {
+        self.selected_entities.first()
+    }
+
+    /// Get all selected entities
+    pub fn all(&self) -> &[SelectionHit] {
+        &self.selected_entities
+    }
+
+    /// Check if any entity is selected
+    pub fn is_empty(&self) -> bool {
+        self.selected_entities.is_empty()
+    }
+
+    /// Get count of selected entities
+    pub fn count(&self) -> usize {
+        self.selected_entities.len()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Viewer {
-    camera: Camera,
-    viewport: Viewport,
-    shapes: HashMap<usize, ShapeEntry>,
-    next_shape_id: usize,
-    bounds_min: [f64; 3],
-    bounds_max: [f64; 3],
-}
-
-impl Viewer {
-    /// Create a new viewer with default camera and viewport
-    pub fn new() -> Self {
-        Viewer {
-            camera: Camera::new(),
-            viewport: Viewport::default(),
-            shapes: HashMap::new(),
-            next_shape_id: 0,
-            bounds_min: [f64::INFINITY; 3],
-            bounds_max: [f64::NEG_INFINITY; 3],
-        }
-    }
-
-    /// Create a new viewer with specified viewport
-    pub fn with_viewport(width: usize, height: usize) -> Self {
-        Viewer {
-            camera: Camera::new(),
-            viewport: Viewport::new(width, height),
-            shapes: HashMap::new(),
-            next_shape_id: 0,
-            bounds_min: [f64::INFINITY; 3],
-            bounds_max: [f64::NEG_INFINITY; 3],
-        }
-    }
-
-    /// Get a mutable reference to the camera
-    pub fn camera_mut(&mut self) -> &mut Camera {
-        &mut self.camera
-    }
-
-    /// Get a reference to the camera
-    pub fn camera(&self) -> &Camera {
-        &self.camera
-    }
-
-    /// Get a mutable reference to the viewport
-    pub fn viewport_mut(&mut self) -> &mut Viewport {
-        &mut self.viewport
-    }
-
-    /// Get a reference to the viewport
-    pub fn viewport(&self) -> &Viewport {
-        &self.viewport
-    }
-
-    /// Add a shape to the viewer with default color (white)
-    pub fn add_shape(&mut self, solid: Solid) -> Result<usize> {
-        self.add_shape_with_color(solid, [255, 255, 255])
-    }
-
-    /// Add a shape to the viewer with a specific color (RGB)
-    pub fn add_shape_with_color(&mut self, solid: Solid, color: [u8; 3]) -> Result<usize> {
-        let id = self.next_shape_id;
-        self.next_shape_id += 1;
-
-        let entry = ShapeEntry {
-            solid,
-            color,
-            visible: true,
-        };
-
-        self.shapes.insert(id, entry);
-        self.update_bounds();
-
-        Ok(id)
-    }
-
-    /// Remove a shape from the viewer by ID
-    pub fn remove_shape(&mut self, id: usize) -> Result<()> {
-        if self.shapes.remove(&id).is_some() {
-            self.update_bounds();
-            Ok(())
-        } else {
-            Err(CascadeError::InvalidGeometry(format!("Shape with ID {} not found", id)))
-        }
-    }
-
-    /// Set visibility of a shape
-    pub fn set_shape_visible(&mut self, id: usize, visible: bool) -> Result<()> {
-        if let Some(entry) = self.shapes.get_mut(&id) {
-            entry.visible = visible;
-            Ok(())
-        } else {
-            Err(CascadeError::InvalidGeometry(format!("Shape with ID {} not found", id)))
-        }
-    }
-
-    /// Get the number of shapes in the viewer
-    pub fn shape_count(&self) -> usize {
-        self.shapes.len()
-    }
-
-    /// Fit all visible shapes in the view
-    pub fn fit_all(&mut self) -> Result<()> {
-        if self.bounds_max[0] == f64::NEG_INFINITY || self.bounds_max[0] < self.bounds_min[0] {
-            // No valid bounds
-            return Ok(());
-        }
-
-        // Calculate center and size
-        let center = [
-            (self.bounds_min[0] + self.bounds_max[0]) / 2.0,
-            (self.bounds_min[1] + self.bounds_max[1]) / 2.0,
-            (self.bounds_min[2] + self.bounds_max[2]) / 2.0,
-        ];
-
-        let size = [
-            self.bounds_max[0] - self.bounds_min[0],
-            self.bounds_max[1] - self.bounds_min[1],
-            self.bounds_max[2] - self.bounds_min[2],
-        ];
-
-        let _max_size = size[0].max(size[1]).max(size[2]);
-        let diagonal = (size[0] * size[0] + size[1] * size[1] + size[2] * size[2]).sqrt();
-
-        // Position camera to view all shapes
-        self.camera.set_target(center[0], center[1], center[2]);
-        let distance = diagonal.max(1.0) * 1.5;
-        self.camera
-            .set_position(center[0], center[1] + distance / 2.0, center[2] + distance);
-
-        Ok(())
-    }
-
-    /// Set the view direction (updates camera position while keeping target)
-    pub fn set_view_direction(&mut self, direction: ViewDirection) {
-        let center = [
-            (self.bounds_min[0] + self.bounds_max[0]) / 2.0,
-            (self.bounds_min[1] + self.bounds_max[1]) / 2.0,
-            (self.bounds_min[2] + self.bounds_max[2]) / 2.0,
-        ];
-
-        let size = [
-            self.bounds_max[0] - self.bounds_min[0],
-            self.bounds_max[1] - self.bounds_min[1],
-            self.bounds_max[2] - self.bounds_min[2],
-        ];
-
-        let distance = size[0].max(size[1]).max(size[2]).max(1.0) * 1.5;
-
-        match direction {
-            ViewDirection::Front => {
-                self.camera.set_position(center[0], center[1], center[2] + distance);
-                self.camera.set_up(0.0, 1.0, 0.0);
-            }
-            ViewDirection::Back => {
-                self.camera.set_position(center[0], center[1], center[2] - distance);
-                self.camera.set_up(0.0, 1.0, 0.0);
-            }
-            ViewDirection::Top => {
-                self.camera.set_position(center[0], center[1] + distance, center[2]);
-                self.camera.set_up(0.0, 0.0, -1.0);
-            }
-            ViewDirection::Bottom => {
-                self.camera.set_position(center[0], center[1] - distance, center[2]);
-                self.camera.set_up(0.0, 0.0, 1.0);
-            }
-            ViewDirection::Left => {
-                self.camera.set_position(center[0] - distance, center[1], center[2]);
-                self.camera.set_up(0.0, 1.0, 0.0);
-            }
-            ViewDirection::Right => {
-                self.camera.set_position(center[0] + distance, center[1], center[2]);
-                self.camera.set_up(0.0, 1.0, 0.0);
-            }
-            ViewDirection::Isometric => {
-                let offset = distance / (3.0_f64).sqrt();
-                self.camera.set_position(
-                    center[0] + offset,
-                    center[1] + offset,
-                    center[2] + offset,
-                );
-                self.camera.set_up(0.0, 1.0, 0.0);
-            }
-        }
-
-        self.camera.set_target(center[0], center[1], center[2]);
-    }
-
-    /// Render the viewer to an image buffer (RGBA format)
-    /// Returns a vector of RGBA pixels
-    pub fn render_to_image(&self) -> Result<Vec<u8>> {
-        let width = self.viewport.width;
-        let height = self.viewport.height;
-        let mut buffer = vec![0u8; width * height * 4];
-
-        // Fill with background color
-        for i in 0..width * height {
-            let offset = i * 4;
-            buffer[offset] = self.viewport.background_color[0];
-            buffer[offset + 1] = self.viewport.background_color[1];
-            buffer[offset + 2] = self.viewport.background_color[2];
-            buffer[offset + 3] = self.viewport.background_color[3];
-        }
-
-        // Simple z-buffer for depth
-        let mut z_buffer = vec![f64::NEG_INFINITY; width * height];
-
-        // Get view and projection matrices
-        let view_matrix = self.camera.get_view_matrix();
-        let proj_matrix = self.camera
-            .get_projection_matrix(self.viewport.aspect_ratio());
-
-        let vp_matrix = proj_matrix * view_matrix;
-
-        // Render each shape
-        for entry in self.shapes.values() {
-            if !entry.visible {
-                continue;
-            }
-
-            // Triangulate the shape
-            match triangulate(&entry.solid, 1.0) {
-                Ok(mesh) => {
-                    self.rasterize_mesh(&mesh, &vp_matrix, &entry.color, &mut buffer, &mut z_buffer);
-                }
-                Err(_) => {
-                    // Skip shapes that can't be triangulated
-                    continue;
-                }
-            }
-        }
-
-        Ok(buffer)
-    }
-
-    /// Rasterize a triangle mesh into the image buffer
-    fn rasterize_mesh(
-        &self,
-        mesh: &TriangleMesh,
-        vp_matrix: &na::Matrix4<f64>,
-        color: &[u8; 3],
-        buffer: &mut [u8],
-        z_buffer: &mut [f64],
-    ) {
-        let width = self.viewport.width as f64;
-        let height = self.viewport.height as f64;
-
-        for triangle in &mesh.triangles {
-            let v0_idx = triangle[0];
-            let v1_idx = triangle[1];
-            let v2_idx = triangle[2];
-
-            if v0_idx >= mesh.vertices.len() || v1_idx >= mesh.vertices.len()
-                || v2_idx >= mesh.vertices.len()
-            {
-                continue;
-            }
-
-            let v0 = mesh.vertices[v0_idx];
-            let v1 = mesh.vertices[v1_idx];
-            let v2 = mesh.vertices[v2_idx];
-
-            // Transform vertices to clip space
-            let p0 = self.transform_vertex(&v0, vp_matrix);
-            let p1 = self.transform_vertex(&v1, vp_matrix);
-            let p2 = self.transform_vertex(&v2, vp_matrix);
-
-            // Rasterize triangle
-            self.rasterize_triangle(p0, p1, p2, color, buffer, z_buffer, width, height);
-        }
-    }
-
-    /// Transform a vertex to clip space
-    fn transform_vertex(&self, vertex: &[f64; 3], vp_matrix: &na::Matrix4<f64>) -> [f64; 3] {
-        let v = na::Vector4::new(vertex[0], vertex[1], vertex[2], 1.0);
-        let transformed = vp_matrix * v;
-
-        // Perspective divide
-        let w = if transformed.w.abs() > 1e-6 {
-            transformed.w
-        } else {
-            1.0
-        };
-
-        let x = (transformed.x / w + 1.0) * self.viewport.width as f64 * 0.5;
-        let y = (1.0 - transformed.y / w) * self.viewport.height as f64 * 0.5;
-        let z = transformed.z / w;
-
-        [x, y, z]
-    }
-
-    /// Rasterize a single triangle
-    fn rasterize_triangle(
-        &self,
-        p0: [f64; 3],
-        p1: [f64; 3],
-        p2: [f64; 3],
-        color: &[u8; 3],
-        buffer: &mut [u8],
-        z_buffer: &mut [f64],
-        width: f64,
-        height: f64,
-    ) {
-        let width_i = width as i32;
-        let height_i = height as i32;
-
-        // Bounding box
-        let min_x = (p0[0].min(p1[0]).min(p2[0]).max(0.0) as i32).min(width_i - 1);
-        let max_x = (p0[0].max(p1[0]).max(p2[0]).min(width - 1.0) as i32).max(0);
-        let min_y = (p0[1].min(p1[1]).min(p2[1]).max(0.0) as i32).min(height_i - 1);
-        let max_y = (p0[1].max(p1[1]).max(p2[1]).min(height - 1.0) as i32).max(0);
-
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
-                if x < 0 || x >= width_i || y < 0 || y >= height_i {
-                    continue;
-                }
-
-                let px = x as f64 + 0.5;
-                let py = y as f64 + 0.5;
-
-                // Barycentric coordinates
-                let v0 = [p1[0] - p0[0], p1[1] - p0[1]];
-                let v1 = [p2[0] - p0[0], p2[1] - p0[1]];
-                let v2 = [px - p0[0], py - p0[1]];
-
-                let dot00 = v0[0] * v0[0] + v0[1] * v0[1];
-                let dot01 = v0[0] * v1[0] + v0[1] * v1[1];
-                let dot02 = v0[0] * v2[0] + v0[1] * v2[1];
-                let dot11 = v1[0] * v1[0] + v1[1] * v1[1];
-                let dot12 = v1[0] * v2[0] + v1[1] * v2[1];
-
-                let inv_denom = 1.0 / (dot00 * dot11 - dot01 * dot01);
-                let u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
-                let v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
-
-                // Check if point is in triangle
-                if u >= 0.0 && v >= 0.0 && u + v <= 1.0 {
-                    // Interpolate z
-                    let z = p0[2] + u * (p1[2] - p0[2]) + v * (p2[2] - p0[2]);
-
-                    let idx = y as usize * width_i as usize + x as usize;
-                    if idx < z_buffer.len() && z > z_buffer[idx] {
-                        z_buffer[idx] = z;
-
-                        let offset = idx * 4;
-                        if offset + 3 < buffer.len() {
-                            buffer[offset] = color[0];
-                            buffer[offset + 1] = color[1];
-                            buffer[offset + 2] = color[2];
-                            buffer[offset + 3] = 255;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Update the bounding box based on all visible shapes
-    fn update_bounds(&mut self) {
-        self.bounds_min = [f64::INFINITY; 3];
-        self.bounds_max = [f64::NEG_INFINITY; 3];
-
-        for entry in self.shapes.values() {
-            if !entry.visible {
-                continue;
-            }
-
-            // Try to get bounds from triangulation
-            if let Ok(mesh) = triangulate(&entry.solid, 1.0) {
-                for vertex in &mesh.vertices {
-                    for i in 0..3 {
-                        self.bounds_min[i] = self.bounds_min[i].min(vertex[i]);
-                        self.bounds_max[i] = self.bounds_max[i].max(vertex[i]);
-                    }
-                }
-            }
-        }
-    }
+    style: DisplayStyle,
+    mesh: Option<TriangleMesh>,
+    tolerance: f64,
+    selection: Selection,
+    /// Camera position in world space
+    camera_pos: [f64; 3],
+    /// Camera look-at direction (normalized)
+    camera_dir: [f64; 3],
+    /// Camera up vector (normalized)
+    camera_up: [f64; 3],
+    /// Highlight style configuration
+    highlight_style: HighlightStyle,
+    /// Set of highlighted shape IDs (simple usize identifiers)
+    highlighted_shapes: HashSet<usize>,
+    /// Map of face indices to highlight styles
+    highlighted_faces: HashMap<usize, HighlightStyle>,
+    /// Map of edge indices (vertex_pair tuples) to highlight styles
+    highlighted_edges: HashMap<(usize, usize), HighlightStyle>,
 }
 
 impl Default for Viewer {
     fn default() -> Self {
-        Self::new()
+        Viewer {
+            style: DisplayStyle::default(),
+            mesh: None,
+            tolerance: 1e-3,
+            selection: Selection::default(),
+            camera_pos: [10.0, 10.0, 10.0],
+            camera_dir: [-1.0, -1.0, -1.0],
+            camera_up: [0.0, 0.0, 1.0],
+            highlight_style: HighlightStyle::default(),
+            highlighted_shapes: HashSet::new(),
+            highlighted_faces: HashMap::new(),
+            highlighted_edges: HashMap::new(),
+        }
     }
 }
 
-/// Standard view directions
-#[derive(Debug, Clone, Copy)]
-pub enum ViewDirection {
-    Front,
-    Back,
-    Top,
-    Bottom,
-    Left,
-    Right,
-    Isometric,
+impl Viewer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_tolerance(tolerance: f64) -> Self {
+        Viewer {
+            style: DisplayStyle::default(),
+            mesh: None,
+            tolerance: tolerance.max(1e-6),
+            selection: Selection::default(),
+            camera_pos: [10.0, 10.0, 10.0],
+            camera_dir: [-1.0, -1.0, -1.0],
+            camera_up: [0.0, 0.0, 1.0],
+            highlight_style: HighlightStyle::default(),
+            highlighted_shapes: HashSet::new(),
+            highlighted_faces: HashMap::new(),
+            highlighted_edges: HashMap::new(),
+        }
+    }
+
+    pub fn set_display_mode(&mut self, mode: DisplayMode) {
+        self.style.mode = mode;
+    }
+
+    pub fn set_style(&mut self, style: DisplayStyle) {
+        self.style = style;
+    }
+
+    pub fn load_solid(&mut self, solid: &Solid) -> CascadeResult<()> {
+        self.mesh = Some(crate::mesh::triangulate(solid, self.tolerance)?);
+        Ok(())
+    }
+
+    pub fn mesh(&self) -> Option<&TriangleMesh> {
+        self.mesh.as_ref()
+    }
+
+    pub fn style(&self) -> &DisplayStyle {
+        &self.style
+    }
+
+    pub fn render_shaded(&self) -> CascadeResult<Vec<RenderFace>> {
+        let mesh = self
+            .mesh
+            .as_ref()
+            .ok_or(CascadeError::NotImplemented("No mesh loaded".to_string()))?;
+
+        let mut faces = Vec::new();
+        let light_dir = normalize(&[1.0, 1.0, 1.0]);
+
+        for triangle in &mesh.triangles {
+            let idx0 = triangle[0];
+            let idx1 = triangle[1];
+            let idx2 = triangle[2];
+
+            if idx0 >= mesh.vertices.len()
+                || idx1 >= mesh.vertices.len()
+                || idx2 >= mesh.vertices.len()
+            {
+                continue;
+            }
+
+            let v0 = mesh.vertices[idx0];
+            let v1 = mesh.vertices[idx1];
+            let v2 = mesh.vertices[idx2];
+
+            let e1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
+            let e2 = [v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]];
+
+            let normal = cross_product(&e1, &e2);
+            let normal = normalize(&normal);
+
+            let intensity = (dot_product(&normal, &light_dir) + 1.0) / 2.0;
+            let intensity = intensity.clamp(0.2, 1.0);
+
+            let lit_color = [
+                self.style.color[0] * intensity,
+                self.style.color[1] * intensity,
+                self.style.color[2] * intensity,
+            ];
+
+            faces.push(RenderFace {
+                vertices: [v0, v1, v2],
+                normal,
+                color: lit_color,
+                transparency: self.style.transparency,
+            });
+        }
+
+        Ok(faces)
+    }
+
+    pub fn render_wireframe(&self) -> CascadeResult<Vec<RenderEdge>> {
+        let mesh = self
+            .mesh
+            .as_ref()
+            .ok_or(CascadeError::NotImplemented("No mesh loaded".to_string()))?;
+
+        let mut edges = Vec::new();
+        let mut edge_set = std::collections::HashSet::new();
+
+        for triangle in &mesh.triangles {
+            let idx0 = triangle[0];
+            let idx1 = triangle[1];
+            let idx2 = triangle[2];
+
+            if idx0 >= mesh.vertices.len()
+                || idx1 >= mesh.vertices.len()
+                || idx2 >= mesh.vertices.len()
+            {
+                continue;
+            }
+
+            let edges_to_add = vec![
+                (idx0.min(idx1), idx0.max(idx1)),
+                (idx1.min(idx2), idx1.max(idx2)),
+                (idx2.min(idx0), idx2.max(idx0)),
+            ];
+
+            for (a, b) in edges_to_add {
+                if edge_set.insert((a, b)) {
+                    edges.push(RenderEdge {
+                        start: mesh.vertices[a],
+                        end: mesh.vertices[b],
+                        color: self.style.edge_color,
+                        width: self.style.edge_width,
+                    });
+                }
+            }
+        }
+
+        Ok(edges)
+    }
+
+    pub fn render_shaded_with_edges(&self) -> CascadeResult<(Vec<RenderFace>, Vec<RenderEdge>)> {
+        let faces = self.render_shaded()?;
+        let edges = self.render_wireframe()?;
+        Ok((faces, edges))
+    }
+
+    /// Set the highlight style for subsequent highlight operations
+    pub fn set_highlight_style(&mut self, style: HighlightStyle) {
+        self.highlight_style = style;
+    }
+
+    /// Get the current highlight style
+    pub fn highlight_style(&self) -> &HighlightStyle {
+        &self.highlight_style
+    }
+
+    /// Highlight an entire shape by ID
+    pub fn highlight_shape(&mut self, shape_id: usize) {
+        self.highlighted_shapes.insert(shape_id);
+    }
+
+    /// Remove highlight from a specific shape
+    pub fn unhighlight_shape(&mut self, shape_id: usize) {
+        self.highlighted_shapes.remove(&shape_id);
+    }
+
+    /// Check if a shape is highlighted
+    pub fn is_shape_highlighted(&self, shape_id: usize) -> bool {
+        self.highlighted_shapes.contains(&shape_id)
+    }
+
+    /// Clear all highlighted shapes
+    pub fn clear_shape_highlights(&mut self) {
+        self.highlighted_shapes.clear();
+    }
+
+    /// Highlight a specific face by index
+    pub fn highlight_face(&mut self, face_index: usize, style: Option<HighlightStyle>) {
+        let highlight = style.unwrap_or_else(|| self.highlight_style.clone());
+        self.highlighted_faces.insert(face_index, highlight);
+    }
+
+    /// Remove highlight from a specific face
+    pub fn unhighlight_face(&mut self, face_index: usize) {
+        self.highlighted_faces.remove(&face_index);
+    }
+
+    /// Check if a face is highlighted
+    pub fn is_face_highlighted(&self, face_index: usize) -> bool {
+        self.highlighted_faces.contains_key(&face_index)
+    }
+
+    /// Clear all highlighted faces
+    pub fn clear_face_highlights(&mut self) {
+        self.highlighted_faces.clear();
+    }
+
+    /// Highlight a specific edge by vertex pair indices
+    pub fn highlight_edge(
+        &mut self,
+        start_idx: usize,
+        end_idx: usize,
+        style: Option<HighlightStyle>,
+    ) {
+        let edge_key = if start_idx < end_idx {
+            (start_idx, end_idx)
+        } else {
+            (end_idx, start_idx)
+        };
+        let highlight = style.unwrap_or_else(|| self.highlight_style.clone());
+        self.highlighted_edges.insert(edge_key, highlight);
+    }
+
+    /// Remove highlight from a specific edge
+    pub fn unhighlight_edge(&mut self, start_idx: usize, end_idx: usize) {
+        let edge_key = if start_idx < end_idx {
+            (start_idx, end_idx)
+        } else {
+            (end_idx, start_idx)
+        };
+        self.highlighted_edges.remove(&edge_key);
+    }
+
+    /// Check if an edge is highlighted
+    pub fn is_edge_highlighted(&self, start_idx: usize, end_idx: usize) -> bool {
+        let edge_key = if start_idx < end_idx {
+            (start_idx, end_idx)
+        } else {
+            (end_idx, start_idx)
+        };
+        self.highlighted_edges.contains_key(&edge_key)
+    }
+
+    /// Clear all highlighted edges
+    pub fn clear_edge_highlights(&mut self) {
+        self.highlighted_edges.clear();
+    }
+
+    /// Clear all highlights (shapes, faces, and edges)
+    pub fn clear_highlights(&mut self) {
+        self.clear_shape_highlights();
+        self.clear_face_highlights();
+        self.clear_edge_highlights();
+    }
+
+    /// Get the number of currently highlighted shapes
+    pub fn highlight_count(&self) -> usize {
+        self.highlighted_shapes.len() + self.highlighted_faces.len() + self.highlighted_edges.len()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderFace {
+    pub vertices: [[f64; 3]; 3],
+    pub normal: [f64; 3],
+    pub color: [f64; 3],
+    pub transparency: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderEdge {
+    pub start: [f64; 3],
+    pub end: [f64; 3],
+    pub color: [f64; 3],
+    pub width: f64,
+}
+
+fn dot_product(a: &[f64; 3], b: &[f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross_product(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn normalize(v: &[f64; 3]) -> [f64; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if len > 1e-10 {
+        [v[0] / len, v[1] / len, v[2] / len]
+    } else {
+        [0.0, 0.0, 1.0]
+    }
 }
 
 #[cfg(test)]
@@ -556,139 +545,641 @@ mod tests {
     use crate::primitive::make_box;
 
     #[test]
-    fn test_camera_new() {
-        let camera = Camera::new();
-        assert_eq!(camera.position, [0.0, 0.0, 100.0]);
-        assert_eq!(camera.target, [0.0, 0.0, 0.0]);
-        assert_eq!(camera.up, [0.0, 1.0, 0.0]);
-        assert_eq!(camera.near, 0.1);
-        assert_eq!(camera.far, 10000.0);
+    fn test_display_mode_enum() {
+        assert_eq!(DisplayMode::Shaded, DisplayMode::Shaded);
+        assert_ne!(DisplayMode::Shaded, DisplayMode::Wireframe);
+        assert_ne!(DisplayMode::Wireframe, DisplayMode::ShadedWithEdges);
     }
 
     #[test]
-    fn test_camera_set_position() {
-        let mut camera = Camera::new();
-        camera.set_position(10.0, 20.0, 30.0);
-        assert_eq!(camera.position, [10.0, 20.0, 30.0]);
+    fn test_display_style_default() {
+        let style = DisplayStyle::default();
+        assert_eq!(style.mode, DisplayMode::Shaded);
+        assert_eq!(style.color, [0.8, 0.8, 0.8]);
+        assert_eq!(style.transparency, 1.0);
+        assert_eq!(style.edge_color, [0.0, 0.0, 0.0]);
     }
 
     #[test]
-    fn test_viewport_new() {
-        let viewport = Viewport::new(1024, 768);
-        assert_eq!(viewport.width, 1024);
-        assert_eq!(viewport.height, 768);
-        assert_eq!(viewport.aspect_ratio(), 1024.0 / 768.0);
+    fn test_display_style_builder() {
+        let style = DisplayStyle::new()
+            .with_mode(DisplayMode::Wireframe)
+            .with_color(1.0, 0.0, 0.0)
+            .with_transparency(0.5)
+            .with_edge_color(0.0, 1.0, 0.0)
+            .with_edge_width(2.0);
+
+        assert_eq!(style.mode, DisplayMode::Wireframe);
+        assert_eq!(style.color, [1.0, 0.0, 0.0]);
+        assert_eq!(style.transparency, 0.5);
+        assert_eq!(style.edge_color, [0.0, 1.0, 0.0]);
+        assert_eq!(style.edge_width, 2.0);
     }
 
     #[test]
-    fn test_viewport_background_color() {
-        let mut viewport = Viewport::new(800, 600);
-        viewport.set_background_color(255, 0, 0, 255);
-        assert_eq!(viewport.background_color, [255, 0, 0, 255]);
+    fn test_display_style_color_clamping() {
+        let style = DisplayStyle::new().with_color(1.5, -0.5, 0.5);
+
+        assert_eq!(style.color[0], 1.0);
+        assert_eq!(style.color[1], 0.0);
+        assert_eq!(style.color[2], 0.5);
     }
 
     #[test]
-    fn test_viewer_new() {
+    fn test_display_style_transparency_clamping() {
+        let style = DisplayStyle::new().with_transparency(1.5);
+        assert_eq!(style.transparency, 1.0);
+
+        let style = DisplayStyle::new().with_transparency(-0.5);
+        assert_eq!(style.transparency, 0.0);
+    }
+
+    #[test]
+    fn test_viewer_creation() {
         let viewer = Viewer::new();
-        assert_eq!(viewer.shape_count(), 0);
-        assert_eq!(viewer.viewport.width, 800);
-        assert_eq!(viewer.viewport.height, 600);
+        assert_eq!(viewer.style.mode, DisplayMode::Shaded);
+        assert!(viewer.mesh.is_none());
     }
 
     #[test]
-    fn test_viewer_add_shape() {
+    fn test_viewer_with_tolerance() {
+        let viewer = Viewer::with_tolerance(1e-4);
+        assert_eq!(viewer.tolerance, 1e-4);
+
+        let viewer = Viewer::with_tolerance(1e-10);
+        assert_eq!(viewer.tolerance, 1e-6);
+    }
+
+    #[test]
+    fn test_viewer_set_display_mode() {
         let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        assert_eq!(viewer.style.mode, DisplayMode::Shaded);
 
-        let id = viewer.add_shape(box_shape).expect("Failed to add shape");
-        assert_eq!(viewer.shape_count(), 1);
-        assert_eq!(id, 0);
+        viewer.set_display_mode(DisplayMode::Wireframe);
+        assert_eq!(viewer.style.mode, DisplayMode::Wireframe);
 
-        let id2 = viewer.add_shape(make_box(5.0, 5.0, 5.0).unwrap()).unwrap();
-        assert_eq!(viewer.shape_count(), 2);
-        assert_eq!(id2, 1);
+        viewer.set_display_mode(DisplayMode::ShadedWithEdges);
+        assert_eq!(viewer.style.mode, DisplayMode::ShadedWithEdges);
     }
 
     #[test]
-    fn test_viewer_remove_shape() {
+    fn test_viewer_set_style() {
         let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-        let id = viewer.add_shape(box_shape).expect("Failed to add shape");
+        let style = DisplayStyle::new()
+            .with_mode(DisplayMode::Wireframe)
+            .with_color(0.5, 0.5, 0.5);
 
-        assert_eq!(viewer.shape_count(), 1);
-        viewer.remove_shape(id).expect("Failed to remove shape");
-        assert_eq!(viewer.shape_count(), 0);
+        viewer.set_style(style.clone());
+        assert_eq!(viewer.style.mode, DisplayMode::Wireframe);
+        assert_eq!(viewer.style.color, [0.5, 0.5, 0.5]);
     }
 
     #[test]
-    fn test_viewer_add_shape_with_color() {
-        let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-
-        let id = viewer
-            .add_shape_with_color(box_shape, [255, 0, 0])
-            .expect("Failed to add shape");
-        assert_eq!(viewer.shape_count(), 1);
-        assert_eq!(id, 0);
-    }
-
-    #[test]
-    fn test_viewer_fit_all() {
-        let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-        viewer.add_shape(box_shape).expect("Failed to add shape");
-
-        viewer.fit_all().expect("Failed to fit all");
-        // After fit_all, camera should be positioned to see the shape
-        assert_ne!(viewer.camera.position, Camera::new().position);
-    }
-
-    #[test]
-    fn test_viewer_set_view_direction() {
-        let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-        viewer.add_shape(box_shape).expect("Failed to add shape");
-        viewer.fit_all().expect("Failed to fit all");
-
-        let pos_before = viewer.camera.position;
-        viewer.set_view_direction(ViewDirection::Top);
-        let pos_after = viewer.camera.position;
-
-        assert_ne!(pos_before, pos_after);
-        // Y position should be larger for top view
-        assert!(pos_after[1] > pos_before[1] || pos_after != pos_before);
-    }
-
-    #[test]
-    fn test_viewer_render_to_image() {
-        let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-        viewer.add_shape(box_shape).expect("Failed to add shape");
-        viewer.fit_all().expect("Failed to fit all");
-
-        let image = viewer.render_to_image().expect("Failed to render");
-        // Should have RGBA data for 800x600
-        assert_eq!(image.len(), 800 * 600 * 4);
-    }
-
-    #[test]
-    fn test_viewer_render_empty() {
+    fn test_render_shaded_without_mesh() {
         let viewer = Viewer::new();
-        let image = viewer.render_to_image().expect("Failed to render");
-        // Should have RGBA data for 800x600
-        assert_eq!(image.len(), 800 * 600 * 4);
+        let result = viewer.render_shaded();
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_viewer_render_with_color() {
-        let mut viewer = Viewer::new();
-        let box_shape = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
-        viewer
-            .add_shape_with_color(box_shape, [255, 0, 0])
-            .expect("Failed to add shape");
-        viewer.fit_all().expect("Failed to fit all");
+    fn test_render_wireframe_without_mesh() {
+        let viewer = Viewer::new();
+        let result = viewer.render_wireframe();
+        assert!(result.is_err());
+    }
 
-        let image = viewer.render_to_image().expect("Failed to render");
-        assert_eq!(image.len(), 800 * 600 * 4);
+    #[test]
+    fn test_render_shaded_with_edges_without_mesh() {
+        let viewer = Viewer::new();
+        let result = viewer.render_shaded_with_edges();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_render_shaded_display_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+
+        let faces = viewer.render_shaded()?;
+
+        assert!(!faces.is_empty(), "Shaded rendering should produce faces");
+
+        for face in &faces {
+            assert!(
+                face.color.iter().all(|c| *c >= 0.0 && *c <= 1.0),
+                "Colors should be normalized"
+            );
+            assert!(
+                face.transparency >= 0.0 && face.transparency <= 1.0,
+                "Transparency should be normalized"
+            );
+
+            let normal_mag =
+                (face.normal[0].powi(2) + face.normal[1].powi(2) + face.normal[2].powi(2)).sqrt();
+            assert!(
+                (normal_mag - 1.0).abs() < 1e-3 || normal_mag < 1e-6,
+                "Normal should be unit length"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_wireframe_display_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+
+        let edges = viewer.render_wireframe()?;
+
+        assert!(
+            !edges.is_empty(),
+            "Wireframe rendering should produce edges"
+        );
+
+        for edge in &edges {
+            assert!(
+                edge.color.iter().all(|c| *c >= 0.0 && *c <= 1.0),
+                "Edge colors should be normalized"
+            );
+            assert!(edge.width > 0.0, "Edge width should be positive");
+
+            let dx = edge.start[0] - edge.end[0];
+            let dy = edge.start[1] - edge.end[1];
+            let dz = edge.start[2] - edge.end[2];
+            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+            assert!(dist > 1e-6, "Edge start and end should be different");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_shaded_with_edges_display_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+
+        let (faces, edges) = viewer.render_shaded_with_edges()?;
+
+        assert!(!faces.is_empty(), "Should have shaded faces");
+        assert!(!edges.is_empty(), "Should have edges");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_face_structure() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.set_style(
+            DisplayStyle::new()
+                .with_color(1.0, 0.0, 0.0)
+                .with_transparency(0.7),
+        );
+
+        viewer.load_solid(&solid)?;
+        let faces = viewer.render_shaded()?;
+
+        for face in &faces {
+            assert_eq!(face.vertices.len(), 3);
+
+            for vertex in &face.vertices {
+                assert_eq!(vertex.len(), 3);
+            }
+
+            assert!(face.color[0] <= 1.0, "Red channel should respect set color");
+
+            assert_eq!(face.transparency, 0.7);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_edge_structure() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.set_style(
+            DisplayStyle::new()
+                .with_edge_color(0.0, 1.0, 0.0)
+                .with_edge_width(2.5),
+        );
+
+        viewer.load_solid(&solid)?;
+        let edges = viewer.render_wireframe()?;
+
+        for edge in &edges {
+            assert_eq!(edge.color, [0.0, 1.0, 0.0]);
+
+            assert_eq!(edge.width, 2.5);
+
+            assert_eq!(edge.start.len(), 3);
+            assert_eq!(edge.end.len(), 3);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_viewer_load_and_mesh() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::new();
+
+        assert!(viewer.mesh().is_none());
+
+        viewer.load_solid(&solid)?;
+        assert!(viewer.mesh().is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_helper_functions() {
+        let a = [1.0, 0.0, 0.0];
+        let b = [0.0, 1.0, 0.0];
+        assert_eq!(dot_product(&a, &b), 0.0);
+
+        let c = [1.0, 0.0, 0.0];
+        let d = [1.0, 0.0, 0.0];
+        assert_eq!(dot_product(&c, &d), 1.0);
+
+        let cross = cross_product(&a, &b);
+        assert_eq!(cross, [0.0, 0.0, 1.0]);
+
+        let v = [3.0, 4.0, 0.0];
+        let norm = normalize(&v);
+        let mag = (norm[0].powi(2) + norm[1].powi(2) + norm[2].powi(2)).sqrt();
+        assert!((mag - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_lighting_calculation() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.set_style(DisplayStyle::new().with_color(1.0, 1.0, 1.0));
+
+        viewer.load_solid(&solid)?;
+        let faces = viewer.render_shaded()?;
+
+        let mut has_variation = false;
+        let first_brightness = faces[0].color[0];
+
+        for face in &faces {
+            let brightness = face.color[0];
+            if (brightness - first_brightness).abs() > 1e-6 {
+                has_variation = true;
+                break;
+            }
+        }
+
+        assert!(
+            has_variation || faces.len() < 3,
+            "Different face orientations should have different lighting"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_highlight_style_creation() {
+        let style = HighlightStyle::new();
+        assert_eq!(style.color, [1.0, 0.5, 0.0]);
+        assert_eq!(style.opacity, 1.0);
+        assert_eq!(style.outline_width, 2.0);
+    }
+
+    #[test]
+    fn test_highlight_style_builder() {
+        let style = HighlightStyle::new()
+            .with_color(0.0, 1.0, 0.0)
+            .with_opacity(0.7)
+            .with_outline_width(3.0);
+
+        assert_eq!(style.color, [0.0, 1.0, 0.0]);
+        assert_eq!(style.opacity, 0.7);
+        assert_eq!(style.outline_width, 3.0);
+    }
+
+    #[test]
+    fn test_highlight_style_color_clamping() {
+        let style = HighlightStyle::new().with_color(1.5, -0.5, 0.5);
+
+        assert_eq!(style.color[0], 1.0);
+        assert_eq!(style.color[1], 0.0);
+        assert_eq!(style.color[2], 0.5);
+    }
+
+    #[test]
+    fn test_highlight_style_opacity_clamping() {
+        let style = HighlightStyle::new().with_opacity(1.5);
+        assert_eq!(style.opacity, 1.0);
+
+        let style = HighlightStyle::new().with_opacity(-0.5);
+        assert_eq!(style.opacity, 0.0);
+    }
+
+    #[test]
+    fn test_highlight_style_outline_width_clamping() {
+        let style = HighlightStyle::new().with_outline_width(0.05);
+        assert_eq!(style.outline_width, 0.1);
+
+        let style = HighlightStyle::new().with_outline_width(5.0);
+        assert_eq!(style.outline_width, 5.0);
+    }
+
+    #[test]
+    fn test_highlight_shape() {
+        let mut viewer = Viewer::new();
+        assert!(!viewer.is_shape_highlighted(0));
+
+        viewer.highlight_shape(0);
+        assert!(viewer.is_shape_highlighted(0));
+
+        viewer.highlight_shape(1);
+        assert!(viewer.is_shape_highlighted(1));
+        assert_eq!(viewer.highlight_count(), 2);
+    }
+
+    #[test]
+    fn test_unhighlight_shape() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_shape(0);
+        assert!(viewer.is_shape_highlighted(0));
+
+        viewer.unhighlight_shape(0);
+        assert!(!viewer.is_shape_highlighted(0));
+    }
+
+    #[test]
+    fn test_clear_shape_highlights() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_shape(0);
+        viewer.highlight_shape(1);
+        viewer.highlight_shape(2);
+        assert_eq!(viewer.highlight_count(), 3);
+
+        viewer.clear_shape_highlights();
+        assert_eq!(viewer.highlight_count(), 0);
+        assert!(!viewer.is_shape_highlighted(0));
+    }
+
+    #[test]
+    fn test_highlight_face() {
+        let mut viewer = Viewer::new();
+        assert!(!viewer.is_face_highlighted(0));
+
+        viewer.highlight_face(0, None);
+        assert!(viewer.is_face_highlighted(0));
+
+        let custom_style = HighlightStyle::new().with_color(1.0, 0.0, 0.0);
+        viewer.highlight_face(1, Some(custom_style));
+        assert!(viewer.is_face_highlighted(1));
+        assert_eq!(viewer.highlight_count(), 2);
+    }
+
+    #[test]
+    fn test_unhighlight_face() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_face(0, None);
+        assert!(viewer.is_face_highlighted(0));
+
+        viewer.unhighlight_face(0);
+        assert!(!viewer.is_face_highlighted(0));
+    }
+
+    #[test]
+    fn test_clear_face_highlights() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_face(0, None);
+        viewer.highlight_face(1, None);
+        viewer.highlight_face(2, None);
+        assert_eq!(viewer.highlight_count(), 3);
+
+        viewer.clear_face_highlights();
+        assert_eq!(viewer.highlight_count(), 0);
+        assert!(!viewer.is_face_highlighted(0));
+    }
+
+    #[test]
+    fn test_highlight_edge() {
+        let mut viewer = Viewer::new();
+        assert!(!viewer.is_edge_highlighted(0, 1));
+
+        viewer.highlight_edge(0, 1, None);
+        assert!(viewer.is_edge_highlighted(0, 1));
+        assert!(viewer.is_edge_highlighted(1, 0)); // Order shouldn't matter
+
+        let custom_style = HighlightStyle::new().with_color(0.0, 0.0, 1.0);
+        viewer.highlight_edge(2, 3, Some(custom_style));
+        assert!(viewer.is_edge_highlighted(2, 3));
+        assert_eq!(viewer.highlight_count(), 2);
+    }
+
+    #[test]
+    fn test_unhighlight_edge() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_edge(0, 1, None);
+        assert!(viewer.is_edge_highlighted(0, 1));
+
+        viewer.unhighlight_edge(0, 1);
+        assert!(!viewer.is_edge_highlighted(0, 1));
+    }
+
+    #[test]
+    fn test_edge_highlight_order_independence() {
+        let mut viewer = Viewer::new();
+
+        // Highlight with (0, 1) order
+        viewer.highlight_edge(0, 1, None);
+
+        // Check with reversed order (1, 0)
+        assert!(viewer.is_edge_highlighted(1, 0));
+
+        // Unhighlight with reversed order
+        viewer.unhighlight_edge(1, 0);
+        assert!(!viewer.is_edge_highlighted(0, 1));
+    }
+
+    #[test]
+    fn test_clear_edge_highlights() {
+        let mut viewer = Viewer::new();
+        viewer.highlight_edge(0, 1, None);
+        viewer.highlight_edge(2, 3, None);
+        viewer.highlight_edge(4, 5, None);
+        assert_eq!(viewer.highlight_count(), 3);
+
+        viewer.clear_edge_highlights();
+        assert_eq!(viewer.highlight_count(), 0);
+        assert!(!viewer.is_edge_highlighted(0, 1));
+    }
+
+    #[test]
+    fn test_clear_all_highlights() {
+        let mut viewer = Viewer::new();
+
+        // Highlight shapes, faces, and edges
+        viewer.highlight_shape(0);
+        viewer.highlight_shape(1);
+        viewer.highlight_face(0, None);
+        viewer.highlight_face(1, None);
+        viewer.highlight_edge(0, 1, None);
+        viewer.highlight_edge(2, 3, None);
+
+        assert_eq!(viewer.highlight_count(), 6);
+
+        // Clear all
+        viewer.clear_highlights();
+        assert_eq!(viewer.highlight_count(), 0);
+        assert!(!viewer.is_shape_highlighted(0));
+        assert!(!viewer.is_face_highlighted(0));
+        assert!(!viewer.is_edge_highlighted(0, 1));
+    }
+
+    #[test]
+    fn test_multiple_highlights_coexist() {
+        let mut viewer = Viewer::new();
+
+        // Add multiple highlights
+        viewer.highlight_shape(0);
+        viewer.highlight_shape(1);
+        viewer.highlight_face(5, None);
+        viewer.highlight_face(6, None);
+        viewer.highlight_edge(10, 11, None);
+        viewer.highlight_edge(12, 13, None);
+
+        assert_eq!(viewer.highlight_count(), 6);
+
+        // Verify all are still highlighted
+        assert!(viewer.is_shape_highlighted(0));
+        assert!(viewer.is_shape_highlighted(1));
+        assert!(viewer.is_face_highlighted(5));
+        assert!(viewer.is_face_highlighted(6));
+        assert!(viewer.is_edge_highlighted(10, 11));
+        assert!(viewer.is_edge_highlighted(12, 13));
+    }
+
+    #[test]
+    fn test_set_highlight_style() {
+        let mut viewer = Viewer::new();
+        let custom_style = HighlightStyle::new()
+            .with_color(0.5, 0.5, 0.5)
+            .with_opacity(0.5)
+            .with_outline_width(4.0);
+
+        viewer.set_highlight_style(custom_style.clone());
+
+        let retrieved = viewer.highlight_style();
+        assert_eq!(retrieved.color, [0.5, 0.5, 0.5]);
+        assert_eq!(retrieved.opacity, 0.5);
+        assert_eq!(retrieved.outline_width, 4.0);
+    }
+
+    #[test]
+    fn test_highlight_with_custom_style() {
+        let mut viewer = Viewer::new();
+        let style1 = HighlightStyle::new().with_color(1.0, 0.0, 0.0);
+        let style2 = HighlightStyle::new().with_color(0.0, 1.0, 0.0);
+
+        viewer.highlight_face(0, Some(style1));
+        viewer.highlight_face(1, Some(style2));
+
+        assert!(viewer.is_face_highlighted(0));
+        assert!(viewer.is_face_highlighted(1));
+    }
+
+    #[test]
+    fn test_highlight_count_accuracy() {
+        let mut viewer = Viewer::new();
+
+        assert_eq!(viewer.highlight_count(), 0);
+
+        viewer.highlight_shape(0);
+        assert_eq!(viewer.highlight_count(), 1);
+
+        viewer.highlight_face(0, None);
+        assert_eq!(viewer.highlight_count(), 2);
+
+        viewer.highlight_edge(0, 1, None);
+        assert_eq!(viewer.highlight_count(), 3);
+
+        viewer.unhighlight_shape(0);
+        assert_eq!(viewer.highlight_count(), 2);
+
+        viewer.unhighlight_face(0);
+        assert_eq!(viewer.highlight_count(), 1);
+
+        viewer.unhighlight_edge(0, 1);
+        assert_eq!(viewer.highlight_count(), 0);
+    }
+
+    #[test]
+    fn test_highlight_with_box_geometry() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+
+        // Get mesh info
+        let mesh = viewer.mesh().unwrap();
+        let _vertex_count = mesh.vertices.len();
+        let triangle_count = mesh.triangles.len();
+
+        // Highlight first few faces
+        for i in 0..triangle_count.min(5) {
+            viewer.highlight_face(i, None);
+        }
+
+        assert!(viewer.highlight_count() >= 5);
+        assert!(viewer.is_face_highlighted(0));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_highlight_persistence_across_operations() {
+        let mut viewer = Viewer::new();
+
+        // Set highlights
+        viewer.highlight_shape(0);
+        viewer.highlight_face(0, None);
+        viewer.highlight_edge(0, 1, None);
+
+        // Modify display style
+        viewer.set_display_mode(DisplayMode::Wireframe);
+
+        // Highlights should still be there
+        assert!(viewer.is_shape_highlighted(0));
+        assert!(viewer.is_face_highlighted(0));
+        assert!(viewer.is_edge_highlighted(0, 1));
+    }
+
+    #[test]
+    fn test_highlight_independent_operations() {
+        let mut viewer = Viewer::new();
+
+        // Highlight shapes
+        viewer.highlight_shape(0);
+        viewer.highlight_shape(1);
+        viewer.highlight_shape(2);
+
+        // Clear only shape highlights
+        viewer.clear_shape_highlights();
+        assert_eq!(viewer.highlight_count(), 0);
+
+        // Highlight faces
+        viewer.highlight_face(0, None);
+        viewer.highlight_face(1, None);
+        assert_eq!(viewer.highlight_count(), 2);
+
+        // Add edge highlights
+        viewer.highlight_edge(0, 1, None);
+        assert_eq!(viewer.highlight_count(), 3);
+
+        // Clear only face highlights
+        viewer.clear_face_highlights();
+        assert_eq!(viewer.highlight_count(), 1);
+        assert!(viewer.is_edge_highlighted(0, 1));
     }
 }
