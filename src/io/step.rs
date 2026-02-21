@@ -545,6 +545,7 @@ impl StepParser {
         Ok(Solid {
             outer_shell,
             inner_shells: vec![],
+            attributes: Default::default(),
         })
     }
     

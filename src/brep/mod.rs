@@ -650,6 +650,8 @@ pub struct Shell {
 pub struct Solid {
     pub outer_shell: Shell,
     pub inner_shells: Vec<Shell>,  // voids
+    #[serde(default)]
+    pub attributes: super::xde::ShapeAttributes,  // XDE metadata (name, color, layer, material)
 }
 
 /// A compound of multiple shapes

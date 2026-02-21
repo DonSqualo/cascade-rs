@@ -100,6 +100,7 @@ pub fn make_loft(profiles: &[Wire], ruled: bool) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
 
     Ok(solid)

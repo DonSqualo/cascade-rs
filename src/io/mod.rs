@@ -6,6 +6,7 @@ mod obj;
 mod ply;
 
 use crate::brep::{Shape, Solid, Shell, Face, Wire, Edge, Vertex, CurveType, SurfaceType, Compound};
+use crate::xde::ShapeAttributes;
 use crate::{Result, CascadeError};
 use std::io::Write;
 
@@ -55,6 +56,31 @@ pub fn write_step(shape: &Shape, path: &str) -> Result<()> {
     let writer = std::io::BufWriter::new(file);
     let mut step_writer = StepWriter::new(writer);
     step_writer.write_shape(shape)
+}
+
+/// Write a STEP file with color and material attributes (AP214)
+/// 
+/// Exports a solid with its XDE attributes (name, color, layer, material) using
+/// STEP AP214 representation with COLOUR_RGB, STYLED_ITEM, and PRESENTATION_STYLE_ASSIGNMENT.
+/// 
+/// # Arguments
+/// * `solid` - The solid to export
+/// * `path` - Output file path
+/// 
+/// # Example
+/// ```rust,no_run
+/// use cascade::{make_sphere, xde, io};
+/// 
+/// let mut sphere = make_sphere(10.0)?;
+/// xde::set_shape_color(&mut sphere, [1.0, 0.0, 0.0]);  // Red color
+/// io::write_step_with_attributes(&sphere, "colored_sphere.step")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn write_step_with_attributes(solid: &Solid, path: &str) -> Result<()> {
+    let file = std::fs::File::create(path)?;
+    let writer = std::io::BufWriter::new(file);
+    let mut step_writer = StepWriter::new(writer);
+    step_writer.write_solid_with_attributes(solid)
 }
 
 /// Write a STEP file with PMI (Product Manufacturing Information)
@@ -146,6 +172,74 @@ impl<W: Write> StepWriter<W> {
         }
         
         self.write_file()?;
+        Ok(())
+    }
+    
+    /// Write a solid with color and material attributes (STEP AP214)
+    fn write_solid_with_attributes(&mut self, solid: &Solid) -> Result<()> {
+        // Add the geometric data
+        let root_solid_id = self.add_solid(solid);
+        
+        // If the solid has a color, add STEP AP214 color entities
+        if let Some(color) = solid.attributes.color {
+            self.add_color_entity(root_solid_id, color)?;
+        }
+        
+        self.write_file()?;
+        Ok(())
+    }
+    
+    /// Add STEP AP214 color entities for a solid
+    /// Creates COLOUR_RGB, SURFACE_STYLE_USAGE, STYLED_ITEM, and PRESENTATION_STYLE_ASSIGNMENT
+    fn add_color_entity(&mut self, solid_id: usize, color: [f64; 3]) -> Result<()> {
+        // Create COLOUR_RGB entity
+        let colour_rgb_id = self.next_id();
+        let entity = format!(
+            "#{} = COLOUR_RGB('', {:.6}, {:.6}, {:.6});",
+            colour_rgb_id, color[0], color[1], color[2]
+        );
+        self.entities.push(entity);
+        
+        // Create SURFACE_STYLE_RENDERING_PROPERTIES with the color
+        let surface_style_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_STYLE_RENDERING_PROPERTIES('', #{}, $, $, $);",
+            surface_style_id, colour_rgb_id
+        );
+        self.entities.push(entity);
+        
+        // Create SURFACE_SIDE_STYLE
+        let surface_side_style_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_SIDE_STYLE('', (#{}, ));",
+            surface_side_style_id, surface_style_id
+        );
+        self.entities.push(entity);
+        
+        // Create SURFACE_STYLE_USAGE (for POSITIVE side)
+        let surface_style_usage_id = self.next_id();
+        let entity = format!(
+            "#{} = SURFACE_STYLE_USAGE(.POSITIVE., #{});",
+            surface_style_usage_id, surface_side_style_id
+        );
+        self.entities.push(entity);
+        
+        // Create STYLED_ITEM
+        let styled_item_id = self.next_id();
+        let entity = format!(
+            "#{} = STYLED_ITEM('', (#{}), #{});",
+            styled_item_id, surface_style_usage_id, solid_id
+        );
+        self.entities.push(entity);
+        
+        // Create PRESENTATION_STYLE_ASSIGNMENT
+        let presentation_style_id = self.next_id();
+        let entity = format!(
+            "#{} = PRESENTATION_STYLE_ASSIGNMENT((#{}));",
+            presentation_style_id, styled_item_id
+        );
+        self.entities.push(entity);
+        
         Ok(())
     }
     
@@ -947,6 +1041,54 @@ impl<W: Write> StepWriter<W> {
             plane_id, origin_id, normal_id
         );
         self.entities.push(plane_entity);
+        
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitive::make_sphere;
+    use crate::xde::set_shape_color;
+    use std::fs;
+
+    #[test]
+    fn test_step_color() -> Result<()> {
+        // Create a sphere
+        let mut sphere = make_sphere(10.0)?;
+        
+        // Set color to red [1.0, 0.0, 0.0]
+        set_shape_color(&mut sphere, [1.0, 0.0, 0.0]);
+        
+        // Write to STEP file with colors
+        let output_path = "/tmp/test_colored_sphere.step";
+        write_step_with_attributes(&sphere, output_path)?;
+        
+        // Verify file was created
+        assert!(fs::metadata(output_path).is_ok(), "STEP file was not created");
+        
+        // Read the file and verify it contains color entities
+        let contents = fs::read_to_string(output_path)?;
+        
+        // Check for COLOUR_RGB entity
+        assert!(contents.contains("COLOUR_RGB"), "STEP file does not contain COLOUR_RGB entity");
+        
+        // Check for SURFACE_STYLE_RENDERING_PROPERTIES
+        assert!(contents.contains("SURFACE_STYLE_RENDERING_PROPERTIES"), "STEP file does not contain SURFACE_STYLE_RENDERING_PROPERTIES");
+        
+        // Check for STYLED_ITEM
+        assert!(contents.contains("STYLED_ITEM"), "STEP file does not contain STYLED_ITEM");
+        
+        // Check for PRESENTATION_STYLE_ASSIGNMENT
+        assert!(contents.contains("PRESENTATION_STYLE_ASSIGNMENT"), "STEP file does not contain PRESENTATION_STYLE_ASSIGNMENT");
+        
+        // Check for the color values in the file (1.0, 0.0, 0.0)
+        assert!(contents.contains("1.000000"), "STEP file does not contain color value 1.0");
+        assert!(contents.contains("0.000000"), "STEP file does not contain color value 0.0");
+        
+        // Clean up
+        fs::remove_file(output_path).ok();
         
         Ok(())
     }

@@ -110,6 +110,7 @@ pub fn add_draft(solid: &Solid, face: &Face, angle: f64, neutral_plane: &Face) -
     let result_solid = Solid {
         outer_shell: new_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(result_solid)
@@ -235,6 +236,7 @@ pub fn taper(
     let result_solid = Solid {
         outer_shell: new_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(result_solid)

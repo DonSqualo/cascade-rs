@@ -462,6 +462,7 @@ fn combine_non_intersecting(solid1: &Solid, solid2: &Solid) -> Result<Solid> {
     Ok(Solid {
         outer_shell: combined_shell,
         inner_shells: combined_inner_shells,
+        attributes: Default::default(),
     })
 }
 
@@ -544,6 +545,7 @@ fn fuse_intersecting(solid1: &Solid, solid2: &Solid) -> Result<Solid> {
     Ok(Solid {
         outer_shell: result_shell,
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -625,6 +627,7 @@ fn cut_intersecting(solid1: &Solid, solid2: &Solid) -> Result<Solid> {
             closed: true,
         },
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -705,6 +708,7 @@ fn common_intersecting(solid1: &Solid, solid2: &Solid) -> Result<Solid> {
             closed: true,
         },
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -1223,6 +1227,7 @@ fn fuse_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Re
     Ok(Solid {
         outer_shell: result_shell,
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -1262,6 +1267,7 @@ fn cut_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> Res
             closed: true,
         },
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -1300,6 +1306,7 @@ fn common_intersecting_fuzzy(solid1: &Solid, solid2: &Solid, tolerance: f64) -> 
             closed: true,
         },
         inner_shells: Vec::new(),
+        attributes: Default::default(),
     })
 }
 
@@ -1498,6 +1505,7 @@ fn split_solid_by_tool(solid: &Solid, tool: &Solid) -> Result<Vec<Solid>> {
                 closed: true,
             },
             inner_shells: Vec::new(),
+            attributes: Default::default(),
         };
         
         // Only add if it has at least 4 faces (minimum for a valid solid)
@@ -1524,6 +1532,7 @@ fn split_solid_by_tool(solid: &Solid, tool: &Solid) -> Result<Vec<Solid>> {
                 closed: true,
             },
             inner_shells: Vec::new(),
+            attributes: Default::default(),
         };
         
         // Only add if it has at least 4 faces (minimum for a valid solid)

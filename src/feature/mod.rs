@@ -634,6 +634,7 @@ fn rotate_solid_around_axis(
     Ok(Solid {
         outer_shell: new_shell,
         inner_shells: rotated_inner_shells,
+        attributes: Default::default(),
     })
 }
 
@@ -1079,6 +1080,7 @@ pub fn linear_pattern(
         let patterned_solid = Solid {
             outer_shell: new_shell,
             inner_shells: translated_inner,
+            attributes: Default::default(),
         };
 
         patterns.push(patterned_solid);
@@ -1204,6 +1206,7 @@ fn position_solid_at_with_direction(
     let result = Solid {
         outer_shell: new_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(result)

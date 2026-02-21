@@ -150,6 +150,7 @@ pub fn replace_face(solid: &Solid, face_index: usize, new_face: &Face) -> Result
     let new_solid = Solid {
         outer_shell: new_outer_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(new_solid)
@@ -672,6 +673,7 @@ pub fn remove_face(solid: &Solid, face_index: usize) -> Result<Solid> {
     let new_solid = Solid {
         outer_shell: new_outer_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(new_solid)
@@ -776,6 +778,7 @@ pub fn thicken_face(face: &Face, thickness: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
 
     Ok(solid)
@@ -1287,6 +1290,7 @@ mod tests {
                 closed: false,
             },
             inner_shells: vec![],
+            attributes: Default::default(),
         };
 
         // Create a new face with a different surface type but same boundary
@@ -1355,6 +1359,7 @@ mod tests {
                 closed: false,
             },
             inner_shells: vec![],
+            attributes: Default::default(),
         };
 
         // Try to replace a face with an invalid index
@@ -1403,6 +1408,7 @@ mod tests {
                 closed: false,
             },
             inner_shells: vec![],
+            attributes: Default::default(),
         };
 
         // Create a new face with different edge count
@@ -1482,6 +1488,7 @@ mod tests {
                 closed: false,
             },
             inner_shells: vec![],
+            attributes: Default::default(),
         };
 
         // Create a new face with same edge count but different vertices

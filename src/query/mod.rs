@@ -3093,6 +3093,7 @@ mod tests {
                 closed: false,
             },
             inner_shells: vec![],
+            attributes: Default::default(),
         };
         let classification = classify_shape(&solid).unwrap();
         assert_eq!(classification, ShapeClass::Degenerate, "Empty solid should be degenerate");

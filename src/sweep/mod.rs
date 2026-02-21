@@ -106,6 +106,7 @@ pub fn make_prism(profile: &Face, direction: &[f64; 3], distance: f64) -> Result
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     })
 }
 
@@ -214,6 +215,7 @@ pub fn make_pipe(profile: &Face, path: &Wire) -> Result<Solid> {
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     })
 }
 
@@ -668,6 +670,7 @@ pub fn make_draft_prism(
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     })
 }
 
@@ -896,6 +899,7 @@ pub fn make_revol(
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     })
 }
 
@@ -1283,6 +1287,7 @@ pub fn evolved(profile: &Wire, spine: &Wire, options: &EvolveOptions) -> Result<
     Ok(Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     })
 }
 

@@ -280,6 +280,7 @@ impl Builder {
         Ok(Solid {
             outer_shell: outer_shell.clone(),
             inner_shells: Vec::new(),
+            attributes: Default::default(),
         })
     }
 
@@ -310,6 +311,7 @@ impl Builder {
         Ok(Solid {
             outer_shell: outer_shell.clone(),
             inner_shells: inner_shells.to_vec(),
+            attributes: Default::default(),
         })
     }
 
@@ -822,6 +824,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: new_inner_shells,
+            attributes: Default::default(),
         })
     }
 
@@ -912,6 +915,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: new_inner_shells,
+            attributes: Default::default(),
         })
     }
 
@@ -986,6 +990,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: new_inner_shells,
+            attributes: Default::default(),
         })
     }
 
@@ -1031,6 +1036,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: new_inner_shells,
+            attributes: Default::default(),
         })
     }
 
@@ -1136,6 +1142,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: new_inner_shells,
+            attributes: Default::default(),
         })
     }
 
@@ -1217,6 +1224,7 @@ impl Modifier {
         Ok(Solid {
             outer_shell: new_outer_shell,
             inner_shells: solid.inner_shells.clone(),
+            attributes: Default::default(),
         })
     }
 

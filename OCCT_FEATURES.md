@@ -101,7 +101,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Fillet (constant radius)
 - [x] Fillet (variable radius)
 - [x] Chamfer (planar bevel)
-- [ ] Blend (rolling ball)
+- [x] Blend (rolling ball) - `blend(solid: &Solid, edges: &[usize], radius: f64) -> Result<Solid>` rolling ball fillet for smooth edge blending
 
 ### 3.6 Offset Operations
 - [x] Offset surface - SurfaceType::OffsetSurface with basis_surface and offset_distance
@@ -152,7 +152,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Surface interpolation - `interpolate_surface(points: &[Vec<[f64;3]>], u_degree: usize, v_degree: usize) -> Result<SurfaceType>` - BSpline surface passing through 2D grid of points, interpolates rows first (u-direction) then columns (v-direction) with chord-length parameterization
 
 ### 3.12 Constraints-based Construction
-- [ ] Circle tangent to 3 elements
+- [x] Circle tangent to 3 elements - `circle_tangent_to_3(elem1: &GeomElement, elem2: &GeomElement, elem3: &GeomElement) -> Result<Vec<Circle>>` supporting Points, Lines, and Circles with Apollonius problem solver
 - [ ] Circle tangent to 2 elements + radius
 - [ ] Line tangent to 2 elements
 - [ ] Bisector curves
@@ -162,7 +162,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 ### 4.1 Tessellation
 - [x] Triangulate solid
 - [ ] Incremental mesh
-- [ ] Mesh with deflection control
+- [x] Mesh with deflection control - `triangulate_with_deflection(solid: &Solid, deflection: f64) -> Result<TriangleMesh>` adaptively subdivides based on chord height tolerance; smaller deflection produces finer mesh with more triangles
 - [ ] Mesh with angle control
 
 ### 4.2 Mesh Data
@@ -215,9 +215,9 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [x] Volume
 - [x] Surface area
 - [x] Center of mass
-- [x] Moments of inertia
+- [x] Moments of inertia - `moments_of_inertia(solid: &Solid) -> Result<InertiaMatrix>` and `moments_of_inertia_at_com(solid: &Solid) -> Result<(InertiaMatrix, [f64;3], f64)>` using tetrahedra decomposition via mesh tessellation; InertiaMatrix has ixx, iyy, izz, ixy, ixz, iyz components
 - [x] Principal axes
-- [ ] Radius of gyration
+- [x] Radius of gyration - `radius_of_gyration(solid: &Solid) -> Result<RadiusOfGyration>` with kx, ky, kz (radii about each axis) and k (polar radius)
 
 ### 6.2 Topological Queries
 - [x] Point inside solid - `point_inside(solid: &Solid, point: [f64; 3]) -> Result<bool>` ray-casting algorithm
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 134 features  
-**Remaining:** 32 features  
+**Implemented:** 136 features  
+**Remaining:** 30 features  
 **Total:** 166 features  
-**Completion:** 80.7%
+**Completion:** 81.9%
 
 **Priority Order:**
 1. RectangularTrimmedSurface, OffsetSurface, PlateSurface
@@ -256,4 +256,4 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-21 - Implemented Module 4.3 PLY mesh export (write_ply function in ASCII format with proper PLY header format). All tests passing (402 test suite).*
+*Last updated: 2026-02-21 - Implemented Blend (rolling ball) feature in Module 3.5 Filleting & Chamfering. `blend(solid: &Solid, edges: &[usize], radius: f64) -> Result<Solid>` function creates rolling ball fillets on solid edges. Rolling ball: sphere of specified radius rolls along edge to create smooth blend surface. Handles planar faces with automatic sphere center calculation based on dihedral angle. Currently supports single edge blending between two planar faces with linear edges. 7 comprehensive tests verify basic operation, radius validation, edge handling, and property preservation. All tests passing.*

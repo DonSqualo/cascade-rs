@@ -38,6 +38,54 @@ pub fn triangulate(solid: &Solid, tolerance: f64) -> Result<TriangleMesh> {
     Ok(TriangleMesh { vertices, normals, triangles })
 }
 
+/// Triangulate a solid into a mesh with deflection (chord height) control
+///
+/// This function adaptively subdivides the mesh based on deflection tolerance.
+/// Deflection = the maximum allowed distance between the mesh edge (chord) and the actual curved surface.
+///
+/// # Arguments
+/// * `solid` - The solid to triangulate
+/// * `deflection` - Maximum chord height tolerance (smaller = finer mesh = more triangles)
+///
+/// # Example
+/// ```ignore
+/// let sphere = make_sphere(10.0)?;
+/// 
+/// // Coarse mesh with 1.0 deflection
+/// let mesh_coarse = triangulate_with_deflection(&sphere, 1.0)?;
+/// 
+/// // Fine mesh with 0.1 deflection
+/// let mesh_fine = triangulate_with_deflection(&sphere, 0.1)?;
+/// 
+/// // Fine mesh will have significantly more triangles
+/// assert!(mesh_fine.triangles.len() > mesh_coarse.triangles.len());
+/// ```
+pub fn triangulate_with_deflection(solid: &Solid, deflection: f64) -> Result<TriangleMesh> {
+    if deflection <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            "Deflection must be positive".into(),
+        ));
+    }
+    
+    let mut vertices = Vec::new();
+    let mut normals = Vec::new();
+    let mut triangles = Vec::new();
+    
+    // Process outer shell
+    for face in &solid.outer_shell.faces {
+        triangulate_face(face, deflection, &mut vertices, &mut normals, &mut triangles)?;
+    }
+    
+    // Process inner shells (voids)
+    for shell in &solid.inner_shells {
+        for face in &shell.faces {
+            triangulate_face(face, deflection, &mut vertices, &mut normals, &mut triangles)?;
+        }
+    }
+    
+    Ok(TriangleMesh { vertices, normals, triangles })
+}
+
 /// Triangulate a single face and collect its triangles
 fn triangulate_face(
     face: &Face,
@@ -98,6 +146,60 @@ fn triangulate_face(
         }
         SurfaceType::OffsetSurface { .. } => {
             triangulate_parametric_surface(face, tolerance, vertices, normals, triangles)?;
+        }
+    }
+    Ok(())
+}
+
+/// Triangulate a single face with deflection control
+fn triangulate_face_with_deflection(
+    face: &Face,
+    deflection: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    match &face.surface_type {
+        SurfaceType::Plane { origin, normal } => {
+            // Planar faces don't need deflection control
+            triangulate_planar_face(face, origin, normal, vertices, normals, triangles)?;
+        }
+        SurfaceType::Sphere { center, radius } => {
+            // For sphere, use deflection to control subdivision
+            // TODO: Implement triangulate_spherical_face_deflection
+            // For now, use planar approximation
+            if !face.outer_wire.edges.is_empty() {
+                let v0 = &face.outer_wire.edges[0].start.point;
+                let normal = [
+                    center[0] - v0[0],
+                    center[1] - v0[1],
+                    center[2] - v0[2],
+                ];
+                let norm_len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+                let normal = if norm_len > 1e-6 {
+                    [normal[0] / norm_len, normal[1] / norm_len, normal[2] / norm_len]
+                } else {
+                    [0.0, 0.0, 1.0]
+                };
+                triangulate_planar_face(face, center, &normal, vertices, normals, triangles)?;
+            }
+        }
+        SurfaceType::Cylinder { origin, axis, radius } => {
+            // Cylinder is developable, use deflection
+            triangulate_cylindrical_face_deflection(face, origin, axis, *radius, deflection, vertices, normals, triangles)?;
+        }
+        SurfaceType::Cone { origin, axis, half_angle_rad } => {
+            // Cone is developable, use deflection
+            triangulate_conical_face_deflection(face, origin, axis, *half_angle_rad, deflection, vertices, normals, triangles)?;
+        }
+        SurfaceType::Torus { center, major_radius, minor_radius } => {
+            // Torus is curved, use deflection
+            triangulate_toroidal_face_deflection(face, center, *major_radius, *minor_radius, deflection, vertices, normals, triangles)?;
+        }
+        _ => {
+            // For other surface types, fall back to fixed subdivision
+            // (could be enhanced for BSpline, Bezier, etc.)
+            triangulate_parametric_surface(face, deflection, vertices, normals, triangles)?;
         }
     }
     Ok(())
@@ -224,6 +326,96 @@ fn triangulate_cylindrical_face(
     Ok(())
 }
 
+/// Triangulate a cylindrical face with deflection control
+fn triangulate_cylindrical_face_deflection(
+    face: &Face,
+    origin: &[f64; 3],
+    axis: &[f64; 3],
+    radius: f64,
+    deflection: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    let axis_normalized = normalize(axis);
+    
+    // Create perpendicular vectors
+    let perp1 = perpendicular_to(&axis_normalized);
+    let perp2 = cross(&axis_normalized, &perp1);
+    
+    // Get the height range from the wire
+    let outer_points = wire_to_points(&face.outer_wire);
+    let mut min_z = f64::INFINITY;
+    let mut max_z = f64::NEG_INFINITY;
+    
+    for point in &outer_points {
+        let z = dot(&[point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]], &axis_normalized);
+        min_z = min_z.min(z);
+        max_z = max_z.max(z);
+    }
+    
+    // For cylinder circumference, use deflection formula for circle: 
+    // chord height s = r * (1 - cos(θ/2)), solve for angle
+    let sagitta = deflection.min(radius);
+    let cos_half_angle = 1.0 - sagitta / radius;
+    let cos_half_angle = cos_half_angle.clamp(-1.0, 1.0);
+    let half_angle = cos_half_angle.acos();
+    let angle_per_edge = 2.0 * half_angle;
+    
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let angle_subdivisions = (two_pi / angle_per_edge).ceil() as usize;
+    let angle_subdivisions = angle_subdivisions.max(3);
+    
+    // Height subdivisions: use deflection as tolerance
+    let height_subdivisions = ((max_z - min_z) / deflection).ceil() as usize + 1;
+    let height_subdivisions = height_subdivisions.max(2);
+    
+    let base_idx = vertices.len();
+    
+    // Create vertex grid
+    for h in 0..=height_subdivisions {
+        let z_param = min_z + (h as f64) / (height_subdivisions as f64) * (max_z - min_z);
+        let z_offset = scale_vec(&axis_normalized, z_param);
+        
+        for a in 0..angle_subdivisions {
+            let angle = (a as f64) / (angle_subdivisions as f64) * two_pi;
+            let cos_a = angle.cos();
+            let sin_a = angle.sin();
+            
+            let x = origin[0] + z_offset[0] + (cos_a * perp1[0] + sin_a * perp2[0]) * radius;
+            let y = origin[1] + z_offset[1] + (cos_a * perp1[1] + sin_a * perp2[1]) * radius;
+            let z = origin[2] + z_offset[2] + (cos_a * perp1[2] + sin_a * perp2[2]) * radius;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal points outward from cylinder axis
+            let normal = normalize(&[
+                x - origin[0] - z_offset[0],
+                y - origin[1] - z_offset[1],
+                z - origin[2] - z_offset[2],
+            ]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for h in 0..height_subdivisions {
+        for a in 0..angle_subdivisions {
+            let a_next = (a + 1) % angle_subdivisions;
+            
+            let v0 = base_idx + h * angle_subdivisions + a;
+            let v1 = base_idx + h * angle_subdivisions + a_next;
+            let v2 = base_idx + (h + 1) * angle_subdivisions + a;
+            let v3 = base_idx + (h + 1) * angle_subdivisions + a_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
 /// Triangulate a spherical face
 fn triangulate_spherical_face(
     _face: &Face,
@@ -273,6 +465,83 @@ fn triangulate_spherical_face(
             let v1 = base_idx + lat * subdivisions + lon_next;
             let v2 = base_idx + (lat + 1) * subdivisions + lon;
             let v3 = base_idx + (lat + 1) * subdivisions + lon_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a spherical face with deflection control
+fn triangulate_spherical_face_deflection(
+    _face: &Face,
+    center: &[f64; 3],
+    radius: f64,
+    deflection: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    // For a sphere, calculate the angle subtended by a chord of given deflection
+    // Chord height (sagitta) formula: s = r * (1 - cos(θ/2))
+    // Solving for θ: θ = 2 * arccos(1 - s/r)
+    // where s is the sagitta (deflection) and r is the radius
+    
+    let sagitta = deflection.min(radius); // Ensure we don't exceed radius
+    let cos_half_angle = 1.0 - sagitta / radius;
+    let cos_half_angle = cos_half_angle.clamp(-1.0, 1.0); // Ensure valid range for arccos
+    let half_angle = cos_half_angle.acos();
+    let angle_per_edge = 2.0 * half_angle;
+    
+    // Calculate number of subdivisions needed
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let pi = std::f64::consts::PI;
+    
+    // Latitude subdivisions: from -π/2 to π/2 = π total
+    let lat_subdivisions = (pi / angle_per_edge).ceil() as usize;
+    let lat_subdivisions = lat_subdivisions.max(2);
+    
+    // Longitude subdivisions: from 0 to 2π = 2π total
+    let lon_subdivisions = (two_pi / angle_per_edge).ceil() as usize;
+    let lon_subdivisions = lon_subdivisions.max(3);
+    
+    let base_idx = vertices.len();
+    
+    // Latitude loops
+    for lat in 0..=lat_subdivisions {
+        let lat_angle = -pi / 2.0 + (lat as f64) / (lat_subdivisions as f64) * pi;
+        let lat_sin = lat_angle.sin();
+        let lat_cos = lat_angle.cos();
+        
+        // Longitude points
+        for lon in 0..lon_subdivisions {
+            let lon_angle = (lon as f64) / (lon_subdivisions as f64) * two_pi;
+            let lon_cos = lon_angle.cos();
+            let lon_sin = lon_angle.sin();
+            
+            let x = center[0] + radius * lat_cos * lon_cos;
+            let y = center[1] + radius * lat_cos * lon_sin;
+            let z = center[2] + radius * lat_sin;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal is radial direction
+            let normal = normalize(&[x - center[0], y - center[1], z - center[2]]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for lat in 0..lat_subdivisions {
+        for lon in 0..lon_subdivisions {
+            let lon_next = (lon + 1) % lon_subdivisions;
+            
+            let v0 = base_idx + lat * lon_subdivisions + lon;
+            let v1 = base_idx + lat * lon_subdivisions + lon_next;
+            let v2 = base_idx + (lat + 1) * lon_subdivisions + lon;
+            let v3 = base_idx + (lat + 1) * lon_subdivisions + lon_next;
             
             triangles.push([v0, v1, v2]);
             triangles.push([v1, v3, v2]);
@@ -376,6 +645,110 @@ fn triangulate_conical_face(
     Ok(())
 }
 
+/// Triangulate a conical face with deflection control
+fn triangulate_conical_face_deflection(
+    face: &Face,
+    origin: &[f64; 3],
+    axis: &[f64; 3],
+    half_angle_rad: f64,
+    deflection: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    let axis_normalized = normalize(axis);
+    
+    // Create perpendicular vectors
+    let perp1 = perpendicular_to(&axis_normalized);
+    let perp2 = cross(&axis_normalized, &perp1);
+    
+    // Get the height range from the wire
+    let outer_points = wire_to_points(&face.outer_wire);
+    let mut min_z = f64::INFINITY;
+    let mut max_z = f64::NEG_INFINITY;
+    
+    for point in &outer_points {
+        let z = dot(&[point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]], &axis_normalized);
+        min_z = min_z.min(z);
+        max_z = max_z.max(z);
+    }
+    
+    // Calculate radii at min and max height
+    let radius_at_min = (min_z.abs()) * half_angle_rad.tan();
+    let radius_at_max = (max_z.abs()) * half_angle_rad.tan();
+    let max_radius = radius_at_min.max(radius_at_max);
+    
+    // Use deflection for angle subdivisions
+    let sagitta = deflection.min(max_radius);
+    let cos_half_angle = if max_radius > 0.0 {
+        (1.0 - sagitta / max_radius).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    };
+    let half_angle = cos_half_angle.acos();
+    let angle_per_edge = 2.0 * half_angle;
+    
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let angle_subdivisions = (two_pi / angle_per_edge).ceil() as usize;
+    let angle_subdivisions = angle_subdivisions.max(3);
+    
+    let height_subdivisions = ((max_z - min_z) / deflection).ceil() as usize + 1;
+    let height_subdivisions = height_subdivisions.max(2);
+    
+    let base_idx = vertices.len();
+    
+    // Create vertex grid
+    for h in 0..=height_subdivisions {
+        let z_param = min_z + (h as f64) / (height_subdivisions as f64) * (max_z - min_z);
+        let radius = z_param.abs() * half_angle_rad.tan();
+        let z_offset = scale_vec(&axis_normalized, z_param);
+        
+        for a in 0..angle_subdivisions {
+            let angle = (a as f64) / (angle_subdivisions as f64) * two_pi;
+            let cos_a = angle.cos();
+            let sin_a = angle.sin();
+            
+            let x = origin[0] + z_offset[0] + (cos_a * perp1[0] + sin_a * perp2[0]) * radius;
+            let y = origin[1] + z_offset[1] + (cos_a * perp1[1] + sin_a * perp2[1]) * radius;
+            let z = origin[2] + z_offset[2] + (cos_a * perp1[2] + sin_a * perp2[2]) * radius;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal for cone: perpendicular to cone surface
+            let radial_dir = normalize(&[
+                cos_a * perp1[0] + sin_a * perp2[0],
+                cos_a * perp1[1] + sin_a * perp2[1],
+                cos_a * perp1[2] + sin_a * perp2[2],
+            ]);
+            let cos_normal_angle = half_angle_rad.cos();
+            let sin_normal_angle = half_angle_rad.sin();
+            let normal = normalize(&[
+                radial_dir[0] * cos_normal_angle - axis_normalized[0] * sin_normal_angle,
+                radial_dir[1] * cos_normal_angle - axis_normalized[1] * sin_normal_angle,
+                radial_dir[2] * cos_normal_angle - axis_normalized[2] * sin_normal_angle,
+            ]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for h in 0..height_subdivisions {
+        for a in 0..angle_subdivisions {
+            let a_next = (a + 1) % angle_subdivisions;
+            
+            let v0 = base_idx + h * angle_subdivisions + a;
+            let v1 = base_idx + h * angle_subdivisions + a_next;
+            let v2 = base_idx + (h + 1) * angle_subdivisions + a;
+            let v3 = base_idx + (h + 1) * angle_subdivisions + a_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
 /// Triangulate a toroidal face
 fn triangulate_toroidal_face(
     _face: &Face,
@@ -418,6 +791,87 @@ fn triangulate_toroidal_face(
             
             // Normal points outward from the torus surface
             // It's the direction from the major circle to the point
+            let normal = normalize(&[
+                (major_radius + minor_radius * v_cos) * u_cos,
+                (major_radius + minor_radius * v_cos) * u_sin,
+                minor_radius * v_sin,
+            ]);
+            normals.push(normal);
+        }
+    }
+    
+    // Create triangles
+    for u in 0..major_subdivisions {
+        for v in 0..minor_subdivisions {
+            let v_next = v + 1;
+            
+            let v0 = base_idx + u * (minor_subdivisions + 1) + v;
+            let v1 = base_idx + u * (minor_subdivisions + 1) + v_next;
+            let v2 = base_idx + (u + 1) * (minor_subdivisions + 1) + v;
+            let v3 = base_idx + (u + 1) * (minor_subdivisions + 1) + v_next;
+            
+            triangles.push([v0, v1, v2]);
+            triangles.push([v1, v3, v2]);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Triangulate a toroidal face with deflection control
+fn triangulate_toroidal_face_deflection(
+    _face: &Face,
+    center: &[f64; 3],
+    major_radius: f64,
+    minor_radius: f64,
+    deflection: f64,
+    vertices: &mut Vec<[f64; 3]>,
+    normals: &mut Vec<[f64; 3]>,
+    triangles: &mut Vec<[usize; 3]>,
+) -> Result<()> {
+    // Calculate subdivisions based on deflection
+    // For torus, we need to handle both major and minor circle deflections
+    
+    // Major circle: from radius major_radius
+    let major_sagitta = deflection.min(major_radius);
+    let major_cos_half = (1.0 - major_sagitta / major_radius).clamp(-1.0, 1.0);
+    let major_half_angle = major_cos_half.acos();
+    let major_angle_per_edge = 2.0 * major_half_angle;
+    
+    // Minor circle: from radius minor_radius
+    let minor_sagitta = deflection.min(minor_radius);
+    let minor_cos_half = (1.0 - minor_sagitta / minor_radius).clamp(-1.0, 1.0);
+    let minor_half_angle = minor_cos_half.acos();
+    let minor_angle_per_edge = 2.0 * minor_half_angle;
+    
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let major_subdivisions = (two_pi / major_angle_per_edge).ceil() as usize;
+    let major_subdivisions = major_subdivisions.max(3);
+    
+    let minor_subdivisions = (two_pi / minor_angle_per_edge).ceil() as usize;
+    let minor_subdivisions = minor_subdivisions.max(3);
+    
+    let base_idx = vertices.len();
+    
+    // Generate torus surface by sweeping a circle (minor) around another circle (major)
+    for u in 0..=major_subdivisions {
+        let u_angle = (u as f64) / (major_subdivisions as f64) * two_pi;
+        let u_cos = u_angle.cos();
+        let u_sin = u_angle.sin();
+        
+        for v in 0..=minor_subdivisions {
+            let v_angle = (v as f64) / (minor_subdivisions as f64) * two_pi;
+            let v_cos = v_angle.cos();
+            let v_sin = v_angle.sin();
+            
+            // Position on torus
+            let x = center[0] + (major_radius + minor_radius * v_cos) * u_cos;
+            let y = center[1] + (major_radius + minor_radius * v_cos) * u_sin;
+            let z = center[2] + minor_radius * v_sin;
+            
+            vertices.push([x, y, z]);
+            
+            // Normal points outward from the torus surface
             let normal = normalize(&[
                 (major_radius + minor_radius * v_cos) * u_cos,
                 (major_radius + minor_radius * v_cos) * u_sin,

@@ -96,6 +96,7 @@ pub fn thick_solid(solid: &Solid, offset: f64) -> Result<Solid> {
     let result_solid = Solid {
         outer_shell: new_shell,
         inner_shells: Vec::new(),  // Clear inner shells for offset
+        attributes: Default::default(),
     };
 
     Ok(result_solid)
@@ -213,6 +214,7 @@ pub fn make_shell(solid: &Solid, thickness: f64, faces_to_remove: &[Face]) -> Re
     let result_solid = Solid {
         outer_shell: new_shell,
         inner_shells: solid.inner_shells.clone(),
+        attributes: Default::default(),
     };
 
     Ok(result_solid)

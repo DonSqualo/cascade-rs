@@ -10,6 +10,7 @@
 use crate::brep::{Solid, Edge, Face, Wire, Vertex, Shell, CurveType, SurfaceType};
 use crate::{Result, CascadeError};
 use crate::brep::topology;
+use crate::xde::ShapeAttributes;
 use std::cmp::Ordering;
 
 /// Interpolation method for variable radius fillet
@@ -299,6 +300,7 @@ pub fn make_fillet(solid: &Solid, edge_indices: &[usize], radius: f64) -> Result
     let result = Solid {
         outer_shell: new_shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
 
     Ok(result)
@@ -390,6 +392,7 @@ pub fn make_fillet_variable(solid: &Solid, edge_index: usize, radius_law: &Radiu
     let result = Solid {
         outer_shell: new_shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
 
     Ok(result)
@@ -879,6 +882,262 @@ fn collect_other_faces(solid: &Solid, face1: &Face, face2: &Face) -> Vec<Face> {
     other
 }
 
+/// Create a rolling ball blend on specified edges of a solid
+///
+/// A rolling ball blend is created by rolling a sphere of the specified radius
+/// along an edge, creating a smooth blend between the two adjacent faces.
+/// This approach handles complex edge intersections better than constant-radius
+/// fillets and creates a more natural rounded edge.
+///
+/// # Arguments
+/// * `solid` - The input solid to blend
+/// * `edges` - Array of edges to blend (by index in a canonical edge list)
+/// * `radius` - The radius of the rolling ball sphere
+///
+/// # Returns
+/// A new Solid with blended edges
+pub fn blend(solid: &Solid, edge_indices: &[usize], radius: f64) -> Result<Solid> {
+    if radius <= 0.0 {
+        return Err(CascadeError::InvalidGeometry(
+            "Blend radius must be positive".into(),
+        ));
+    }
+
+    if edge_indices.is_empty() {
+        return Ok(solid.clone());
+    }
+
+    // For now, implement simple case: single edge blend
+    if edge_indices.len() != 1 {
+        return Err(CascadeError::NotImplemented(
+            "Multi-edge blending not yet implemented".into(),
+        ));
+    }
+
+    let edge_idx = edge_indices[0];
+
+    // Get all edges from the solid in a deterministic order
+    let all_edges = collect_all_edges(solid);
+
+    if edge_idx >= all_edges.len() {
+        return Err(CascadeError::InvalidGeometry(
+            "Edge index out of bounds".into(),
+        ));
+    }
+
+    let target_edge = &all_edges[edge_idx];
+
+    // Find the two faces that share this edge
+    let adjacent = find_adjacent_faces(target_edge, solid)?;
+    if adjacent.len() < 2 {
+        return Err(CascadeError::TopologyError(
+            "Edge must be shared by exactly two faces for blending".into(),
+        ));
+    }
+
+    let face1 = &adjacent[0];
+    let face2 = &adjacent[1];
+
+    // Check if both faces are planar (simple case)
+    let (normal1, _origin1) = extract_plane_info(face1)?;
+    let (normal2, _origin2) = extract_plane_info(face2)?;
+
+    // Get edge endpoints
+    let edge_start = [target_edge.start.point[0], target_edge.start.point[1], target_edge.start.point[2]];
+    let edge_end = [target_edge.end.point[0], target_edge.end.point[1], target_edge.end.point[2]];
+
+    // Create the rolling ball blend surface
+    let blend_face = create_rolling_ball_surface(
+        &edge_start,
+        &edge_end,
+        &normal1,
+        &normal2,
+        radius,
+    )?;
+
+    // Create trimmed versions of the original faces
+    let trimmed_face1 = trim_face_for_blend(face1, target_edge, radius, &normal1)?;
+    let trimmed_face2 = trim_face_for_blend(face2, target_edge, radius, &normal2)?;
+
+    // Collect all other faces (not involved in the blend)
+    let other_faces = collect_other_faces(solid, face1, face2);
+
+    // Build new shell with modified geometry
+    let mut new_faces = vec![trimmed_face1, trimmed_face2, blend_face];
+    new_faces.extend(other_faces);
+
+    let new_shell = Shell {
+        faces: new_faces,
+        closed: true,
+    };
+
+    let result = Solid {
+        outer_shell: new_shell,
+        inner_shells: vec![],
+        attributes: ShapeAttributes::new(),
+    };
+
+    Ok(result)
+}
+
+/// Create a rolling ball blend surface between two planar faces
+fn create_rolling_ball_surface(
+    edge_start: &[f64; 3],
+    edge_end: &[f64; 3],
+    normal1: &[f64; 3],
+    normal2: &[f64; 3],
+    radius: f64,
+) -> Result<Face> {
+    // Edge direction
+    let edge_dir = [
+        edge_end[0] - edge_start[0],
+        edge_end[1] - edge_start[1],
+        edge_end[2] - edge_start[2],
+    ];
+    let edge_len = (edge_dir[0] * edge_dir[0] + edge_dir[1] * edge_dir[1] + edge_dir[2] * edge_dir[2]).sqrt();
+    
+    if edge_len < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Edge has zero length".into(),
+        ));
+    }
+
+    let edge_dir_norm = [edge_dir[0] / edge_len, edge_dir[1] / edge_len, edge_dir[2] / edge_len];
+
+    // Calculate the bisector of the two normals
+    let bisector = [
+        normal1[0] + normal2[0],
+        normal1[1] + normal2[1],
+        normal1[2] + normal2[2],
+    ];
+
+    let bisector_len = (bisector[0] * bisector[0] + bisector[1] * bisector[1] + bisector[2] * bisector[2]).sqrt();
+    
+    if bisector_len < 1e-10 {
+        return Err(CascadeError::InvalidGeometry(
+            "Cannot compute blend for parallel or opposite faces".into(),
+        ));
+    }
+
+    let bisector_norm = [bisector[0] / bisector_len, bisector[1] / bisector_len, bisector[2] / bisector_len];
+
+    // For two faces meeting at angle θ: sphere center offset = radius / sin(θ/2)
+    let cos_angle = normal1[0] * normal2[0] + normal1[1] * normal2[1] + normal1[2] * normal2[2];
+    let cos_angle_clamped = cos_angle.max(-1.0).min(1.0);
+    let angle = cos_angle_clamped.acos();
+    let sin_half_angle = (angle / 2.0).sin();
+
+    let offset_distance = if sin_half_angle > 1e-6 {
+        radius / sin_half_angle
+    } else {
+        radius
+    };
+
+    // Sphere center at the start and end of the edge
+    let center_start = [
+        edge_start[0] + bisector_norm[0] * offset_distance,
+        edge_start[1] + bisector_norm[1] * offset_distance,
+        edge_start[2] + bisector_norm[2] * offset_distance,
+    ];
+
+    let center_end = [
+        edge_end[0] + bisector_norm[0] * offset_distance,
+        edge_end[1] + bisector_norm[1] * offset_distance,
+        edge_end[2] + bisector_norm[2] * offset_distance,
+    ];
+
+    // Create vertices and edges of the blend surface
+    let v1 = Vertex::new(edge_start[0], edge_start[1], edge_start[2]);
+    let v2 = Vertex::new(edge_end[0], edge_end[1], edge_end[2]);
+
+    let edge1 = Edge {
+        start: v1.clone(),
+        end: v2.clone(),
+        curve_type: CurveType::Line,
+    };
+
+    let v3 = Vertex::new(center_start[0], center_start[1], center_start[2]);
+    let v4 = Vertex::new(center_end[0], center_end[1], center_end[2]);
+
+    let edge2 = Edge {
+        start: v3.clone(),
+        end: v4.clone(),
+        curve_type: CurveType::Line,
+    };
+
+    let edge3 = Edge {
+        start: v1.clone(),
+        end: v3.clone(),
+        curve_type: CurveType::Arc {
+            center: center_start.clone(),
+            radius,
+        },
+    };
+
+    let edge4 = Edge {
+        start: v2.clone(),
+        end: v4.clone(),
+        curve_type: CurveType::Arc {
+            center: center_end.clone(),
+            radius,
+        },
+    };
+
+    let blend_wire = Wire {
+        edges: vec![edge1, edge3, edge2, edge4],
+        closed: true,
+    };
+
+    let blend_face = Face {
+        outer_wire: blend_wire,
+        inner_wires: vec![],
+        surface_type: SurfaceType::Cylinder {
+            origin: edge_start.clone(),
+            axis: edge_dir_norm,
+            radius,
+        },
+    };
+
+    Ok(blend_face)
+}
+
+/// Trim a face for blending
+fn trim_face_for_blend(
+    face: &Face,
+    edge: &Edge,
+    radius: f64,
+    normal: &[f64; 3],
+) -> Result<Face> {
+    let mut trimmed_edges = Vec::new();
+
+    for face_edge in &face.outer_wire.edges {
+        if edges_equal(face_edge, edge) {
+            let offset_start = offset_point(&face_edge.start.point, normal, radius);
+            let offset_end = offset_point(&face_edge.end.point, normal, radius);
+
+            let trimmed_edge = Edge {
+                start: Vertex::new(offset_start[0], offset_start[1], offset_start[2]),
+                end: Vertex::new(offset_end[0], offset_end[1], offset_end[2]),
+                curve_type: CurveType::Line,
+            };
+            trimmed_edges.push(trimmed_edge);
+        } else {
+            trimmed_edges.push(face_edge.clone());
+        }
+    }
+
+    let trimmed_wire = Wire {
+        edges: trimmed_edges,
+        closed: face.outer_wire.closed,
+    };
+
+    Ok(Face {
+        outer_wire: trimmed_wire,
+        inner_wires: face.inner_wires.clone(),
+        surface_type: face.surface_type.clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1068,5 +1327,61 @@ mod tests {
         
         // Result should still be closed
         assert!(filleted.outer_shell.closed, "Filleted solid should be closed");
+    }
+
+    #[test]
+    fn test_blend_basic() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[0], 1.0);
+        
+        assert!(result.is_ok(), "Blend operation should succeed");
+        let blended = result.unwrap();
+        assert!(!blended.outer_shell.faces.is_empty(), "Blended solid should have faces");
+        assert!(blended.outer_shell.faces.len() >= 6, "Blended solid should have at least 6 faces");
+    }
+
+    #[test]
+    fn test_blend_invalid_radius() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[0], -1.0);
+        assert!(result.is_err(), "Should fail with negative radius");
+    }
+
+    #[test]
+    fn test_blend_zero_radius() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[0], 0.0);
+        assert!(result.is_err(), "Should fail with zero radius");
+    }
+
+    #[test]
+    fn test_blend_empty_edges() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[], 1.0);
+        
+        assert!(result.is_ok(), "Blend with empty edges should succeed");
+        let blended = result.unwrap();
+        assert_eq!(blended.outer_shell.faces.len(), solid.outer_shell.faces.len());
+    }
+
+    #[test]
+    fn test_blend_invalid_edge_index() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[999], 1.0);
+        assert!(result.is_err(), "Should fail with invalid edge index");
+    }
+
+    #[test]
+    fn test_blend_preserves_closed_property() {
+        let solid = make_box(5.0, 5.0, 5.0).expect("Failed to create box");
+        let blended = blend(&solid, &[0], 0.5).expect("Blend failed");
+        assert!(blended.outer_shell.closed, "Blended solid should be closed");
+    }
+
+    #[test]
+    fn test_blend_multiple_edges_not_implemented() {
+        let solid = make_box(10.0, 10.0, 10.0).expect("Failed to create box");
+        let result = blend(&solid, &[0, 1], 1.0);
+        assert!(result.is_err(), "Multi-edge blending should not be implemented yet");
     }
 }

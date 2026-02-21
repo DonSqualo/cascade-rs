@@ -138,6 +138,7 @@ pub fn make_box(dx: f64, dy: f64, dz: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -233,6 +234,7 @@ pub fn make_sphere(radius: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -361,6 +363,7 @@ pub fn make_cylinder(radius: f64, height: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -518,6 +521,7 @@ pub fn make_cone(radius1: f64, radius2: f64, height: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -619,6 +623,7 @@ pub fn make_torus(major_radius: f64, minor_radius: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -780,6 +785,7 @@ pub fn make_wedge(dx: f64, dy: f64, dz: f64, ltx: f64) -> Result<Solid> {
     let solid = Solid {
         outer_shell: shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
     
     Ok(solid)
@@ -1037,6 +1043,7 @@ impl HalfSpace {
         let solid = Solid {
             outer_shell: shell,
             inner_shells: vec![],
+            attributes: Default::default(),
         };
         
         Ok(solid)

@@ -83,6 +83,7 @@ pub fn fix_shape(shape: &Shape) -> crate::Result<Shape> {
             Ok(Shape::Solid(crate::brep::Solid {
                 outer_shell: fixed_outer,
                 inner_shells: fixed_inner,
+                attributes: Default::default(),
             }))
         }
         Shape::Compound(compound) => {
@@ -100,6 +101,7 @@ pub fn fix_shape(shape: &Shape) -> crate::Result<Shape> {
                     Ok(crate::brep::Solid {
                         outer_shell: fixed_outer,
                         inner_shells: fixed_inner,
+                        attributes: Default::default(),
                     })
                 })
                 .collect::<crate::Result<Vec<_>>>()?;
@@ -325,6 +327,7 @@ pub fn drop_small_edges(solid: &crate::Solid, threshold: f64) -> crate::Result<c
     Ok(crate::Solid {
         outer_shell: fixed_outer,
         inner_shells: fixed_inner,
+        attributes: Default::default(),
     })
 }
 
@@ -718,6 +721,7 @@ mod tests {
         let solid = crate::Solid {
             outer_shell: shell,
             inner_shells: vec![],
+            attributes: Default::default(),
         };
 
         // Drop edges smaller than 0.5 units
@@ -780,6 +784,7 @@ mod tests {
         crate::Solid {
             outer_shell: shell,
             inner_shells: vec![],
+            attributes: Default::default(),
         }
     }
 }

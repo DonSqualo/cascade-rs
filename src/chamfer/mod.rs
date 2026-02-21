@@ -102,6 +102,7 @@ pub fn make_chamfer(solid: &Solid, edge_indices: &[usize], distance: f64) -> Res
     let result = Solid {
         outer_shell: new_shell,
         inner_shells: vec![],
+        attributes: Default::default(),
     };
 
     Ok(result)
