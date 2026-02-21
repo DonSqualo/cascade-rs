@@ -184,7 +184,7 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 - [ ] STEP AP203 full compliance
 - [ ] STEP AP214 full compliance
 - [ ] STEP AP242 full compliance
-- [ ] STEP with colors/materials
+- [x] STEP with colors/materials - `write_step_with_attributes(solid: &Solid, path: &str)` with STEP AP214 COLOUR_RGB, STYLED_ITEM, SURFACE_STYLE_USAGE, PRESENTATION_STYLE_ASSIGNMENT entities
 - [ ] STEP with assemblies
 - [x] STEP with PMI (annotations)
 
