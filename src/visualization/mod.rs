@@ -144,7 +144,6 @@ impl Default for Viewport {
 /// A 3D shape entry in the viewer
 #[derive(Debug, Clone)]
 struct ShapeEntry {
-    id: usize,
     solid: Solid,
     color: [u8; 3],
     visible: bool,
@@ -217,7 +216,6 @@ impl Viewer {
         self.next_shape_id += 1;
 
         let entry = ShapeEntry {
-            id,
             solid,
             color,
             visible: true,

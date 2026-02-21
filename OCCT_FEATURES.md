@@ -233,8 +233,8 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Module 7: Visualization (Lower Priority)
 - [x] 3D viewer - Basic viewer infrastructure with Camera, Viewport, shape management, and rasterization
-- [ ] Shaded display
-- [ ] Wireframe display
+- [x] Shaded display - `Viewer::render_shaded()` with flat shading, per-triangle normals, and directional lighting; RenderFace struct contains vertex positions, surface normal, lighting-modulated color, and transparency
+- [x] Wireframe display - `Viewer::render_wireframe()` with edge-only rendering; RenderEdge struct contains start/end points, edge color, and width; automatic duplicate edge detection
 - [ ] Selection
 - [ ] Highlighting
 
@@ -242,10 +242,10 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ## Current Progress
 
-**Implemented:** 140 features  
-**Remaining:** 26 features  
+**Implemented:** 142 features  
+**Remaining:** 24 features  
 **Total:** 166 features  
-**Completion:** 84.3%
+**Completion:** 85.5%
 
 **Priority Order:**
 1. RectangularTrimmedSurface, OffsetSurface, PlateSurface
@@ -256,7 +256,9 @@ This is the REAL feature list. OCCT has 7 major modules with hundreds of feature
 
 ---
 
-*Last updated: 2026-02-21 - Implemented STEP AP214 Full Compliance in Module 5.1 STEP. Added `write_step_ap214(solid: &Solid, path: &str) -> Result<()>` function for complete AUTOMOTIVE_DESIGN support. Features: (1) Advanced BREP representation with MANIFOLD_SOLID_BREP and CLOSED_SHELL entities, (2) Comprehensive color support via COLOUR_RGB, SURFACE_STYLE_RENDERING_PROPERTIES, STYLED_ITEM, PRESENTATION_STYLE_ASSIGNMENT, (3) Layer management with REPRESENTATION_ITEM and MAPPED_ITEM entities, (4) Material specification via MATERIAL and APPLIED_MATERIAL_PROPERTY entities, (5) Validation properties with CONTEXT_DEPENDENT_SHAPE_REPRESENTATION and SHAPE_REPRESENTATION_WITH_PARAMETERS, (6) AUTOMOTIVE_DESIGN application context with APPLICATION_CONTEXT and APPLICATION_PROTOCOL_DEFINITION, (7) Full ISO 10303-21 compliance with proper header entities and schema specification (FILE_SCHEMA('AUTOMOTIVE_DESIGN')), (8) Support for XDE attributes (color, layer, material) in export, (9) Helper methods: add_ap214_color_entity(), add_ap214_layer_entity(), add_ap214_material_entity(), add_ap214_validation_properties(), write_file_ap214(), write_ap214_header(). Comprehensive test: `test_step_ap214_full_compliance()` verifies all AP214 entities, automotive design context, color/layer/material support, validation properties, and ISO 10303-21 file structure. All tests passing: `cargo test step_ap214 --lib` ✓ (1 passed).*
+*Last updated: 2026-02-21 - Implemented Shaded and Wireframe Display Modes in Module 7 Visualization. Added `DisplayMode` enum (Shaded, Wireframe, ShadedWithEdges), `DisplayStyle` struct with mode, color, transparency, edge_color, and edge_width properties, and `Viewer` struct with `load_solid()`, `set_display_mode()`, `set_style()` methods. Implemented `render_shaded()` with flat shading, per-triangle normals, directional lighting, and `render_wireframe()` with edge extraction and duplicate detection. Added `RenderFace` and `RenderEdge` data structures for rendering output. Comprehensive test suite (20 tests) covers: DisplayMode enum, DisplayStyle builder pattern and clamping, Viewer creation and configuration, render methods with and without mesh, face and edge structure validation, helper functions (dot product, cross product, normalize), and lighting calculation. All tests passing: `cargo test visualization:: --lib` ✓ (20 passed).*
+
+*Previous update: 2026-02-21 - Implemented STEP AP214 Full Compliance in Module 5.1 STEP. Added `write_step_ap214(solid: &Solid, path: &str) -> Result<()>` function for complete AUTOMOTIVE_DESIGN support. Features: (1) Advanced BREP representation with MANIFOLD_SOLID_BREP and CLOSED_SHELL entities, (2) Comprehensive color support via COLOUR_RGB, SURFACE_STYLE_RENDERING_PROPERTIES, STYLED_ITEM, PRESENTATION_STYLE_ASSIGNMENT, (3) Layer management with REPRESENTATION_ITEM and MAPPED_ITEM entities, (4) Material specification via MATERIAL and APPLIED_MATERIAL_PROPERTY entities, (5) Validation properties with CONTEXT_DEPENDENT_SHAPE_REPRESENTATION and SHAPE_REPRESENTATION_WITH_PARAMETERS, (6) AUTOMOTIVE_DESIGN application context with APPLICATION_CONTEXT and APPLICATION_PROTOCOL_DEFINITION, (7) Full ISO 10303-21 compliance with proper header entities and schema specification (FILE_SCHEMA('AUTOMOTIVE_DESIGN')), (8) Support for XDE attributes (color, layer, material) in export, (9) Helper methods: add_ap214_color_entity(), add_ap214_layer_entity(), add_ap214_material_entity(), add_ap214_validation_properties(), write_file_ap214(), write_ap214_header(). Comprehensive test: `test_step_ap214_full_compliance()` verifies all AP214 entities, automotive design context, color/layer/material support, validation properties, and ISO 10303-21 file structure. All tests passing: `cargo test step_ap214 --lib` ✓ (1 passed).*
 
 *Previous update: 2026-02-21 - Implemented DXF (2D) Export in Module 5.3 Other Formats. `write_dxf(wires: &[Wire], path: &str) -> Result<()>` function exports 2D wire geometry to DXF ASCII format. Features: (1) Proper DXF structure with HEADER (AC1021 version), CLASSES, TABLES (LAYER table), BLOCKS, and ENTITIES sections, (2) Entity support: LINE for linear edges, ARC for circular arcs with center/radius/start/end angles, SPLINE for BSpline and Bezier curves with control points, fallback LINE for other curve types, (3) Helper functions: calculate_angle() for arc angle computation, write_dxf_header/entities/line/arc/spline for output generation, (4) Comprehensive test suite (4 tests) verifies: rectangle wire with 4 LINE entities, ARC entity with proper center/radius/angles, empty wire handling, and proper DXF structural ordering (HEADER → ENTITIES → EOF). All tests passing with correct entity type declarations and file structure validation.*
 
