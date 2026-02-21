@@ -208,7 +208,7 @@ fn test_angle_control_triangle_normal_angles() {
         .expect("Failed to triangulate");
     
     // Check some adjacent triangles to verify angle constraint
-    let mut max_observed_angle = 0.0;
+    let mut max_observed_angle: f64 = 0.0;
     let mut checked_pairs = 0;
     
     // Build a simple edge-to-triangle adjacency (for testing purposes)

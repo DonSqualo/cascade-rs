@@ -2,6 +2,7 @@
 //!
 //! Targeting 80/20 feature parity with OpenCASCADE.
 
+pub mod foundation;
 pub mod geom;
 pub mod primitive;
 pub mod boolean;
@@ -26,8 +27,10 @@ pub mod local;
 pub mod approx;
 pub mod xde;
 pub mod construct;
+pub mod visualization;
 
 // Re-exports for convenience
+pub use foundation::{Standard_Boolean, Standard_Integer, Standard_Real, Standard_CString, Array1, List, Map, Set, TColStd_Array1, TColStd_List, TColStd_Map, TColStd_Set};
 pub use geom::{Pnt, Vec3, Dir};
 pub use brep::{Vertex, Edge, Wire, Face, Shell, Solid, Compound, CompSolid, Shape};
 pub use brep::topology;
@@ -50,6 +53,8 @@ pub use query::{extrema_curve_curve, extrema_point_solid, project_point_to_curve
 pub use io::{StepDimension, DimensionType, StepGeometricTolerance, write_step_with_pmi, write_step_with_attributes};
 pub use xde::{ShapeAttributes, set_shape_color, get_shape_color, set_shape_name, get_shape_name, set_shape_attributes, get_shape_attributes, set_shape_layer, get_shape_layer, set_shape_material, get_shape_material};
 pub use construct::{circle_tangent_to_3, Circle, GeomElement};
+pub use visualization::{Camera, Viewport, Viewer, ViewDirection, ProjectionType};
+pub use foundation::{Matrix3x3, Matrix4x4, solve_linear_system_3x3, eigenvalues_3x3, VectorOps};
 
 /// Tolerance for geometric comparisons
 pub const TOLERANCE: f64 = 1e-6;
