@@ -10,7 +10,7 @@
 
 | Agent | Package | Started | Status | Tests |
 |-------|---------|---------|--------|-------|
-| port-gp-3d-geom | Pln,Lin,Circ,Cylinder,etc | 10:32 UTC | 🟡 Running | - |
+| port-gp-3d-geom | Pln,Lin,Circ,Cylinder,etc | 2025-02-21 | 🟡 Structure Complete | WIP API fixes |
 | port-bnd | Bnd_Box,Bnd_Sphere,etc | 10:32 UTC | 🟡 Running | - |
 | port-gp-2d | XY,Pnt2d,Vec2d,etc | 10:32 UTC | 🟡 Running | - |
 
@@ -37,16 +37,16 @@ Remaining types to port:
 | Ax2 | gp_Ax2.hxx | ✅ | 2 |
 | Ax3 | gp_Ax3.hxx | ✅ | 3 |
 | Trsf | gp_Trsf.hxx | ✅ | 5 |
-| Pln | gp_Pln.hxx | 🔴 | 0 |
-| Lin | gp_Lin.hxx | 🔴 | 0 |
-| Circ | gp_Circ.hxx | 🔴 | 0 |
-| Elips | gp_Elips.hxx | 🔴 | 0 |
-| Hypr | gp_Hypr.hxx | 🔴 | 0 |
-| Parab | gp_Parab.hxx | 🔴 | 0 |
-| Cylinder | gp_Cylinder.hxx | 🔴 | 0 |
-| Cone | gp_Cone.hxx | 🔴 | 0 |
-| Sphere | gp_Sphere.hxx | 🔴 | 0 |
-| Torus | gp_Torus.hxx | 🔴 | 0 |
+| Pln | gp_Pln.hxx | 🟡 | 16 |
+| Lin | gp_Lin.hxx | 🟡 | 13 |
+| Circ | gp_Circ.hxx | 🟡 | 11 |
+| Elips | gp_Elips.hxx | 🟡 | 8 |
+| Hypr | gp_Hypr.hxx | 🟡 | 6 |
+| Parab | gp_Parab.hxx | 🟡 | 5 |
+| Cylinder | gp_Cylinder.hxx | 🟡 | 6 |
+| Cone | gp_Cone.hxx | 🟡 | 5 |
+| Sphere | gp_Sphere.hxx | 🟡 | 8 |
+| Torus | gp_Torus.hxx | 🟡 | 6 |
 | GTrsf | gp_GTrsf.hxx | 🔴 | 0 |
 | Pnt2d | gp_Pnt2d.hxx | 🔴 | 0 |
 | Vec2d | gp_Vec2d.hxx | 🔴 | 0 |
@@ -137,9 +137,19 @@ Document anything suspicious that might be intentional:
 ### gp
 - `Trsf::Transform` special-cases Identity/Translation/Scale/PntMirror - optimization
 - `Resolution()` = DBL_MIN, different from `Confusion()` = 1e-7
+- Geometric types (Lin, Pln, Circ, etc.) share common transformation API:
+  - mirror_pnt, mirror_ax1, mirror_ax2 (symmetry operations)
+  - rotate, scale, transform, translate (affine operations)
+  - All return immutable copies with `_ed` suffix for functional style
+- Direction methods access via .xyz() to get underlying XYZ
+- Ax1/Ax2/Ax3 use `xdirection()`, `ydirection()` (no underscores)
 
-### Bnd
-- (pending)
+### Port Notes (in progress)
+- Created 10 new modules: lin, pln, circ, elips, hypr, parab, cylinder, cone, sphere, torus
+- Total test stubs written: 84 tests across all 10 types
+- Remaining: API integration fixes (~196 compiler errors due to existing codebase API differences)
+- All methods documented, type signatures complete
+- Major blockers: existing codebase method name variations (need to verify exact APIs)
 
 ---
 
