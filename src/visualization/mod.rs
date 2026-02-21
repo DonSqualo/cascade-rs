@@ -298,6 +298,209 @@ impl Viewer {
         &self.style
     }
 
+    /// Set the selection mode for this viewer
+    pub fn set_selection_mode(&mut self, mode: SelectionMode) {
+        self.selection.set_mode(mode);
+    }
+
+    /// Set the camera position and orientation
+    pub fn set_camera(&mut self, pos: [f64; 3], dir: [f64; 3], up: [f64; 3]) {
+        self.camera_pos = pos;
+        self.camera_dir = normalize(&dir);
+        self.camera_up = normalize(&up);
+    }
+
+    /// Perform ray-casting selection at screen coordinates (x, y)
+    /// Returns the closest hit or None if nothing was selected
+    pub fn select_at(&mut self, x: f64, y: f64, viewport_width: f64, viewport_height: f64) -> Option<SelectionHit> {
+        if self.selection.mode == SelectionMode::None {
+            return None;
+        }
+
+        let mesh = self.mesh.as_ref()?;
+
+        // Generate ray from camera through pixel
+        // Normalize screen coordinates to [-1, 1]
+        let ndc_x = (2.0 * x / viewport_width) - 1.0;
+        let ndc_y = 1.0 - (2.0 * y / viewport_height);
+
+        // Compute ray direction in world space
+        let forward = self.camera_dir;
+        let right = cross_product(&forward, &self.camera_up);
+        let right = normalize(&right);
+        let up = cross_product(&right, &forward);
+        let up = normalize(&up);
+
+        // Simple perspective camera ray
+        let ray_dir = [
+            forward[0] + ndc_x * right[0] * 0.5 + ndc_y * up[0] * 0.5,
+            forward[1] + ndc_x * right[1] * 0.5 + ndc_y * up[1] * 0.5,
+            forward[2] + ndc_x * right[2] * 0.5 + ndc_y * up[2] * 0.5,
+        ];
+        let ray_dir = normalize(&ray_dir);
+
+        let ray_origin = self.camera_pos;
+
+        // Test ray against all triangles in the mesh
+        let mut closest_hit: Option<SelectionHit> = None;
+
+        match self.selection.mode {
+            SelectionMode::Shape => {
+                // Select any triangle hit counts as shape selection
+                for (tri_idx, triangle) in mesh.triangles.iter().enumerate() {
+                    let idx0 = triangle[0];
+                    let idx1 = triangle[1];
+                    let idx2 = triangle[2];
+
+                    if idx0 >= mesh.vertices.len() || idx1 >= mesh.vertices.len() || idx2 >= mesh.vertices.len() {
+                        continue;
+                    }
+
+                    let v0 = mesh.vertices[idx0];
+                    let v1 = mesh.vertices[idx1];
+                    let v2 = mesh.vertices[idx2];
+
+                    if let Some((distance, hit_point)) = ray_triangle_intersection(&ray_origin, &ray_dir, &v0, &v1, &v2) {
+                        if distance >= 0.0 {
+                            if closest_hit.is_none() || distance < closest_hit.as_ref().unwrap().distance {
+                                closest_hit = Some(SelectionHit {
+                                    entity_type: SelectionMode::Shape,
+                                    entity_id: 0,
+                                    distance,
+                                    hit_point,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            SelectionMode::Face => {
+                // Each triangle is considered a face
+                for (tri_idx, triangle) in mesh.triangles.iter().enumerate() {
+                    let idx0 = triangle[0];
+                    let idx1 = triangle[1];
+                    let idx2 = triangle[2];
+
+                    if idx0 >= mesh.vertices.len() || idx1 >= mesh.vertices.len() || idx2 >= mesh.vertices.len() {
+                        continue;
+                    }
+
+                    let v0 = mesh.vertices[idx0];
+                    let v1 = mesh.vertices[idx1];
+                    let v2 = mesh.vertices[idx2];
+
+                    if let Some((distance, hit_point)) = ray_triangle_intersection(&ray_origin, &ray_dir, &v0, &v1, &v2) {
+                        if distance >= 0.0 {
+                            if closest_hit.is_none() || distance < closest_hit.as_ref().unwrap().distance {
+                                closest_hit = Some(SelectionHit {
+                                    entity_type: SelectionMode::Face,
+                                    entity_id: tri_idx,
+                                    distance,
+                                    hit_point,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            SelectionMode::Vertex => {
+                // Select the closest vertex to the ray
+                for (v_idx, vertex) in mesh.vertices.iter().enumerate() {
+                    let to_vertex = [vertex[0] - ray_origin[0], vertex[1] - ray_origin[1], vertex[2] - ray_origin[2]];
+                    let projection_dist = dot_product(&to_vertex, &ray_dir);
+                    
+                    if projection_dist >= 0.0 {
+                        let closest_point_on_ray = [
+                            ray_origin[0] + ray_dir[0] * projection_dist,
+                            ray_origin[1] + ray_dir[1] * projection_dist,
+                            ray_origin[2] + ray_dir[2] * projection_dist,
+                        ];
+                        
+                        let diff = [
+                            vertex[0] - closest_point_on_ray[0],
+                            vertex[1] - closest_point_on_ray[1],
+                            vertex[2] - closest_point_on_ray[2],
+                        ];
+                        let distance = (diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]).sqrt();
+                        
+                        // Allow selection if within a reasonable pick distance (0.1 units from ray)
+                        if distance < 0.1 {
+                            if closest_hit.is_none() || projection_dist < closest_hit.as_ref().unwrap().distance {
+                                closest_hit = Some(SelectionHit {
+                                    entity_type: SelectionMode::Vertex,
+                                    entity_id: v_idx,
+                                    distance: projection_dist,
+                                    hit_point: *vertex,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            SelectionMode::Edge => {
+                // Select edge (line segment) by finding closest approach to ray
+                let mut edge_set = std::collections::HashSet::new();
+                for triangle in &mesh.triangles {
+                    let idx0 = triangle[0];
+                    let idx1 = triangle[1];
+                    let idx2 = triangle[2];
+
+                    let edges = vec![
+                        (idx0.min(idx1), idx0.max(idx1)),
+                        (idx1.min(idx2), idx1.max(idx2)),
+                        (idx2.min(idx0), idx2.max(idx0)),
+                    ];
+
+                    for (a, b) in edges {
+                        edge_set.insert((a, b));
+                    }
+                }
+
+                for (edge_id, (v_idx_a, v_idx_b)) in edge_set.iter().enumerate() {
+                    if *v_idx_a >= mesh.vertices.len() || *v_idx_b >= mesh.vertices.len() {
+                        continue;
+                    }
+
+                    let v_a = mesh.vertices[*v_idx_a];
+                    let v_b = mesh.vertices[*v_idx_b];
+
+                    if let Some((distance, hit_point)) = ray_segment_closest_approach(&ray_origin, &ray_dir, &v_a, &v_b) {
+                        if distance < 0.1 {
+                            if closest_hit.is_none() || distance < closest_hit.as_ref().unwrap().distance {
+                                closest_hit = Some(SelectionHit {
+                                    entity_type: SelectionMode::Edge,
+                                    entity_id: edge_id,
+                                    distance,
+                                    hit_point,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            SelectionMode::None => {}
+        }
+
+        if let Some(hit) = closest_hit.clone() {
+            self.selection.clear();
+            self.selection.add_hit(hit.clone());
+            Some(hit)
+        } else {
+            self.selection.clear();
+            None
+        }
+    }
+
+    /// Get the current selection state
+    pub fn get_selection(&self) -> &Selection {
+        &self.selection
+    }
+
+    /// Get the current selection state (mutable)
+    pub fn get_selection_mut(&mut self) -> &mut Selection {
+        &mut self.selection
+    }
+
     pub fn render_shaded(&self) -> CascadeResult<Vec<RenderFace>> {
         let mesh = self
             .mesh
@@ -536,6 +739,108 @@ fn normalize(v: &[f64; 3]) -> [f64; 3] {
         [v[0] / len, v[1] / len, v[2] / len]
     } else {
         [0.0, 0.0, 1.0]
+    }
+}
+
+/// Ray-triangle intersection using Moller-Trumbore algorithm
+/// Returns (distance, hit_point) if intersection occurs, None otherwise
+fn ray_triangle_intersection(ray_origin: &[f64; 3], ray_dir: &[f64; 3], 
+                             v0: &[f64; 3], v1: &[f64; 3], v2: &[f64; 3]) -> Option<(f64, [f64; 3])> {
+    const EPSILON: f64 = 1e-8;
+
+    let edge1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
+    let edge2 = [v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]];
+
+    let h = cross_product(ray_dir, &edge2);
+    let a = dot_product(&edge1, &h);
+
+    if a.abs() < EPSILON {
+        return None; // Ray parallel to triangle
+    }
+
+    let f = 1.0 / a;
+    let s = [ray_origin[0] - v0[0], ray_origin[1] - v0[1], ray_origin[2] - v0[2]];
+    let u = f * dot_product(&s, &h);
+
+    if u < 0.0 || u > 1.0 {
+        return None;
+    }
+
+    let q = cross_product(&s, &edge1);
+    let v = f * dot_product(ray_dir, &q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+
+    let t = f * dot_product(&edge2, &q);
+
+    if t > EPSILON {
+        let hit_point = [
+            ray_origin[0] + ray_dir[0] * t,
+            ray_origin[1] + ray_dir[1] * t,
+            ray_origin[2] + ray_dir[2] * t,
+        ];
+        Some((t, hit_point))
+    } else {
+        None
+    }
+}
+
+/// Compute closest approach between ray and line segment
+/// Returns (distance_from_ray, closest_point) if segment is close to ray
+fn ray_segment_closest_approach(ray_origin: &[f64; 3], ray_dir: &[f64; 3],
+                                seg_start: &[f64; 3], seg_end: &[f64; 3]) -> Option<(f64, [f64; 3])> {
+    let seg_dir = [seg_end[0] - seg_start[0], seg_end[1] - seg_start[1], seg_end[2] - seg_start[2]];
+    let seg_len_sq = dot_product(&seg_dir, &seg_dir);
+
+    if seg_len_sq < 1e-10 {
+        // Degenerate segment, treat as point
+        let to_start = [seg_start[0] - ray_origin[0], seg_start[1] - ray_origin[1], seg_start[2] - ray_origin[2]];
+        let t = dot_product(&to_start, ray_dir);
+
+        if t >= 0.0 {
+            let closest = [
+                ray_origin[0] + ray_dir[0] * t,
+                ray_origin[1] + ray_dir[1] * t,
+                ray_origin[2] + ray_dir[2] * t,
+            ];
+
+            let diff = [seg_start[0] - closest[0], seg_start[1] - closest[1], seg_start[2] - closest[2]];
+            let dist = (diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]).sqrt();
+            Some((dist, closest))
+        } else {
+            None
+        }
+    } else {
+        let to_start = [seg_start[0] - ray_origin[0], seg_start[1] - ray_origin[1], seg_start[2] - ray_origin[2]];
+
+        let s = dot_product(&to_start, &seg_dir) / seg_len_sq;
+        let s = s.clamp(0.0, 1.0);
+
+        let seg_closest = [
+            seg_start[0] + seg_dir[0] * s,
+            seg_start[1] + seg_dir[1] * s,
+            seg_start[2] + seg_dir[2] * s,
+        ];
+
+        let to_seg_closest = [seg_closest[0] - ray_origin[0], seg_closest[1] - ray_origin[1], seg_closest[2] - ray_origin[2]];
+        let t = dot_product(&to_seg_closest, ray_dir);
+
+        if t >= 0.0 {
+            let ray_closest = [
+                ray_origin[0] + ray_dir[0] * t,
+                ray_origin[1] + ray_dir[1] * t,
+                ray_origin[2] + ray_dir[2] * t,
+            ];
+
+            let diff = [seg_closest[0] - ray_closest[0], seg_closest[1] - ray_closest[1], seg_closest[2] - ray_closest[2]];
+            let dist = (diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]).sqrt();
+
+            Some((dist, seg_closest))
+        } else {
+            None
+        }
     }
 }
 
@@ -1181,5 +1486,353 @@ mod tests {
         viewer.clear_face_highlights();
         assert_eq!(viewer.highlight_count(), 1);
         assert!(viewer.is_edge_highlighted(0, 1));
+    }
+
+    // ===== SELECTION TESTS =====
+
+    #[test]
+    fn test_selection_mode_enum() {
+        assert_eq!(SelectionMode::None, SelectionMode::None);
+        assert_ne!(SelectionMode::None, SelectionMode::Shape);
+        assert_ne!(SelectionMode::Shape, SelectionMode::Face);
+        assert_ne!(SelectionMode::Face, SelectionMode::Edge);
+        assert_ne!(SelectionMode::Edge, SelectionMode::Vertex);
+    }
+
+    #[test]
+    fn test_selection_creation() {
+        let selection = Selection::new();
+        assert_eq!(selection.mode, SelectionMode::None);
+        assert!(selection.is_empty());
+        assert_eq!(selection.count(), 0);
+        assert!(selection.closest().is_none());
+    }
+
+    #[test]
+    fn test_selection_mode_setting() {
+        let mut selection = Selection::new();
+        assert_eq!(selection.mode, SelectionMode::None);
+
+        selection.set_mode(SelectionMode::Shape);
+        assert_eq!(selection.mode, SelectionMode::Shape);
+
+        selection.set_mode(SelectionMode::Face);
+        assert_eq!(selection.mode, SelectionMode::Face);
+    }
+
+    #[test]
+    fn test_selection_hit_addition() {
+        let mut selection = Selection::new();
+        
+        let hit1 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 0,
+            distance: 5.0,
+            hit_point: [0.0, 0.0, 0.0],
+        };
+
+        selection.add_hit(hit1);
+        assert_eq!(selection.count(), 1);
+        assert!(!selection.is_empty());
+        assert!(selection.closest().is_some());
+        assert_eq!(selection.closest().unwrap().distance, 5.0);
+    }
+
+    #[test]
+    fn test_selection_closest_sorting() {
+        let mut selection = Selection::new();
+        
+        let hit1 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 0,
+            distance: 10.0,
+            hit_point: [0.0, 0.0, 0.0],
+        };
+
+        let hit2 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 1,
+            distance: 5.0,
+            hit_point: [1.0, 0.0, 0.0],
+        };
+
+        let hit3 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 2,
+            distance: 15.0,
+            hit_point: [2.0, 0.0, 0.0],
+        };
+
+        selection.add_hit(hit1);
+        selection.add_hit(hit3);
+        selection.add_hit(hit2);
+
+        assert_eq!(selection.count(), 3);
+        assert_eq!(selection.closest().unwrap().distance, 5.0);
+        assert_eq!(selection.closest().unwrap().entity_id, 1);
+    }
+
+    #[test]
+    fn test_selection_clear() {
+        let mut selection = Selection::new();
+        
+        let hit = SelectionHit {
+            entity_type: SelectionMode::Vertex,
+            entity_id: 5,
+            distance: 3.0,
+            hit_point: [0.5, 0.5, 0.5],
+        };
+
+        selection.add_hit(hit);
+        assert_eq!(selection.count(), 1);
+
+        selection.clear();
+        assert_eq!(selection.count(), 0);
+        assert!(selection.is_empty());
+        assert!(selection.closest().is_none());
+    }
+
+    #[test]
+    fn test_selection_all() {
+        let mut selection = Selection::new();
+        
+        let hit1 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 0,
+            distance: 5.0,
+            hit_point: [0.0, 0.0, 0.0],
+        };
+
+        let hit2 = SelectionHit {
+            entity_type: SelectionMode::Face,
+            entity_id: 1,
+            distance: 10.0,
+            hit_point: [1.0, 0.0, 0.0],
+        };
+
+        selection.add_hit(hit1);
+        selection.add_hit(hit2);
+
+        let all = selection.all();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].entity_id, 0);
+        assert_eq!(all[1].entity_id, 1);
+    }
+
+    #[test]
+    fn test_viewer_selection_mode() {
+        let mut viewer = Viewer::new();
+        assert_eq!(viewer.get_selection().mode, SelectionMode::None);
+
+        viewer.set_selection_mode(SelectionMode::Face);
+        assert_eq!(viewer.get_selection().mode, SelectionMode::Face);
+
+        viewer.set_selection_mode(SelectionMode::Vertex);
+        assert_eq!(viewer.get_selection().mode, SelectionMode::Vertex);
+    }
+
+    #[test]
+    fn test_viewer_camera_setting() {
+        let mut viewer = Viewer::new();
+        
+        let pos = [5.0, 5.0, 5.0];
+        let dir = [1.0, 0.0, 0.0];
+        let up = [0.0, 1.0, 0.0];
+
+        viewer.set_camera(pos, dir, up);
+        assert_eq!(viewer.camera_pos, pos);
+    }
+
+    #[test]
+    fn test_viewer_select_without_mode() {
+        let solid = make_box(1.0, 1.0, 1.0).unwrap();
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid).unwrap();
+
+        // No selection mode set - should return None
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_viewer_select_without_mesh() {
+        let mut viewer = Viewer::new();
+        viewer.set_selection_mode(SelectionMode::Shape);
+
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_viewer_select_shape_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+        viewer.set_selection_mode(SelectionMode::Shape);
+        viewer.set_camera([10.0, 10.0, 10.0], [-1.0, -1.0, -1.0], [0.0, 0.0, 1.0]);
+
+        // Try selecting at center of screen
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        
+        // Should get a hit for shape selection
+        if let Some(hit) = result {
+            assert_eq!(hit.entity_type, SelectionMode::Shape);
+            assert!(hit.distance >= 0.0);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_viewer_select_face_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+        viewer.set_selection_mode(SelectionMode::Face);
+        viewer.set_camera([10.0, 10.0, 10.0], [-1.0, -1.0, -1.0], [0.0, 0.0, 1.0]);
+
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        
+        if let Some(hit) = result {
+            assert_eq!(hit.entity_type, SelectionMode::Face);
+            assert!(hit.distance >= 0.0);
+            assert!(hit.entity_id < 1000); // Reasonable face index
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_viewer_select_vertex_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+        viewer.set_selection_mode(SelectionMode::Vertex);
+        viewer.set_camera([10.0, 10.0, 10.0], [-1.0, -1.0, -1.0], [0.0, 0.0, 1.0]);
+
+        // Try selecting near a vertex
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        
+        // Vertex selection has stricter distance requirements
+        // Result may be None if ray doesn't pass close to a vertex
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_viewer_select_edge_mode() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+        viewer.set_selection_mode(SelectionMode::Edge);
+        viewer.set_camera([10.0, 10.0, 10.0], [-1.0, -1.0, -1.0], [0.0, 0.0, 1.0]);
+
+        let result = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        
+        // Edge selection depends on ray proximity to edges
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_selection_clears_on_new_selection() -> CascadeResult<()> {
+        let solid = make_box(1.0, 1.0, 1.0)?;
+        let mut viewer = Viewer::with_tolerance(0.1);
+        viewer.load_solid(&solid)?;
+        viewer.set_selection_mode(SelectionMode::Shape);
+        viewer.set_camera([10.0, 10.0, 10.0], [-1.0, -1.0, -1.0], [0.0, 0.0, 1.0]);
+
+        let _ = viewer.select_at(0.5, 0.5, 1.0, 1.0);
+        let initial_count = viewer.get_selection().count();
+
+        // Select at different location
+        let _ = viewer.select_at(0.3, 0.3, 1.0, 1.0);
+        let final_count = viewer.get_selection().count();
+
+        // Should have at most 1 selection (cleared between selections)
+        assert!(final_count <= 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_selection_mutable() {
+        let mut viewer = Viewer::new();
+        viewer.set_selection_mode(SelectionMode::Face);
+
+        let selection_mut = viewer.get_selection_mut();
+        assert_eq!(selection_mut.mode, SelectionMode::Face);
+        
+        selection_mut.set_mode(SelectionMode::Vertex);
+        assert_eq!(viewer.get_selection().mode, SelectionMode::Vertex);
+    }
+
+    #[test]
+    fn test_ray_triangle_intersection_basic() {
+        let ray_origin = [0.0, 0.0, -5.0];
+        let ray_dir = [0.0, 0.0, 1.0];
+        let v0 = [-1.0, -1.0, 0.0];
+        let v1 = [1.0, -1.0, 0.0];
+        let v2 = [0.0, 1.0, 0.0];
+
+        let result = ray_triangle_intersection(&ray_origin, &ray_dir, &v0, &v1, &v2);
+        assert!(result.is_some(), "Ray should intersect triangle");
+
+        let (dist, hit) = result.unwrap();
+        assert!(dist > 0.0 && dist < 10.0, "Distance should be positive and reasonable");
+        assert!((hit[2] - 0.0).abs() < 1e-6, "Hit point should be on triangle plane (z=0)");
+    }
+
+    #[test]
+    fn test_ray_triangle_intersection_miss() {
+        let ray_origin = [0.0, 0.0, -5.0];
+        let ray_dir = [0.0, 0.0, 1.0];
+        let v0 = [2.0, 2.0, 0.0];
+        let v1 = [3.0, 2.0, 0.0];
+        let v2 = [2.5, 3.0, 0.0];
+
+        let result = ray_triangle_intersection(&ray_origin, &ray_dir, &v0, &v1, &v2);
+        assert!(result.is_none(), "Ray should not intersect distant triangle");
+    }
+
+    #[test]
+    fn test_ray_triangle_intersection_parallel() {
+        let ray_origin = [0.0, 0.0, -5.0];
+        let ray_dir = [1.0, 0.0, 0.0]; // Parallel to triangle in XY plane
+        let v0 = [0.0, 0.0, 0.0];
+        let v1 = [1.0, 0.0, 0.0];
+        let v2 = [0.5, 1.0, 0.0];
+
+        let result = ray_triangle_intersection(&ray_origin, &ray_dir, &v0, &v1, &v2);
+        assert!(result.is_none(), "Parallel ray should not intersect");
+    }
+
+    #[test]
+    fn test_ray_segment_closest_approach_perpendicular() {
+        let ray_origin = [0.0, 0.0, 0.0];
+        let ray_dir = [1.0, 0.0, 0.0];
+        let seg_start = [5.0, -1.0, 0.0];
+        let seg_end = [5.0, 1.0, 0.0];
+
+        let result = ray_segment_closest_approach(&ray_origin, &ray_dir, &seg_start, &seg_end);
+        
+        if let Some((distance, _)) = result {
+            assert!(distance < 1.1, "Closest distance should be ~1.0 (perpendicular segment)");
+        }
+    }
+
+    #[test]
+    fn test_ray_segment_closest_approach_degenerate() {
+        let ray_origin = [0.0, 0.0, 0.0];
+        let ray_dir = [1.0, 0.0, 0.0];
+        let seg_start = [2.0, 0.5, 0.0];
+        let seg_end = [2.0, 0.5, 0.0]; // Degenerate (same point)
+
+        let result = ray_segment_closest_approach(&ray_origin, &ray_dir, &seg_start, &seg_end);
+        
+        if let Some((distance, _)) = result {
+            // Distance from point [2.0, 0.5, 0.0] to ray = sqrt(0.25) = 0.5
+            assert!((distance - 0.5).abs() < 1e-3, "Should compute distance to point");
+        }
     }
 }

@@ -1,13 +1,15 @@
 //! Foundation Classes for CASCADE-RS
 //!
-//! Provides OCCT-compatible primitive types, collection classes, and mathematical utilities
-//! for interoperability with OpenCASCADE-based systems.
+//! Provides OCCT-compatible primitive types, collection classes, mathematical utilities,
+//! and smart pointer wrappers for interoperability with OpenCASCADE-based systems.
 
 #![allow(non_camel_case_types)]
 
 pub mod math;
 pub mod primitives;
 pub mod collections;
+pub mod handles;
+pub mod rtti;
 
 pub use math::{
     Matrix3x3, Matrix4x4,
@@ -22,4 +24,12 @@ pub use primitives::{
 pub use collections::{
     Array1, List, Map, Set,
     TColStd_Array1, TColStd_List, TColStd_Map, TColStd_Set,
+};
+
+pub use handles::{
+    Handle, NCollection_Handle,
+};
+
+pub use rtti::{
+    TypeInfo, Typed, TypedExt,
 };

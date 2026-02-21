@@ -1,6 +1,23 @@
 //! cascade-rs: Pure Rust CAD kernel
 //!
-//! Targeting 80/20 feature parity with OpenCASCADE.
+//! Line-by-line port of OpenCASCADE Technology (OCCT).
+//! Source: https://github.com/Open-Cascade-SAS/OCCT
+
+// =============================================================================
+// OCCT Port Modules (new structure)
+// =============================================================================
+
+/// Precision constants for geometric comparisons.
+/// Port of: src/FoundationClasses/TKernel/Precision/
+pub mod precision;
+
+/// Geometric primitives (gp_Pnt, gp_Vec, gp_Dir, gp_Trsf, etc.).
+/// Port of: src/FoundationClasses/TKMath/gp/
+pub mod gp;
+
+// =============================================================================
+// Legacy Modules (to be migrated)
+// =============================================================================
 
 pub mod foundation;
 pub mod geom;
@@ -53,7 +70,7 @@ pub use query::{extrema_curve_curve, extrema_point_solid, project_point_to_curve
 pub use io::{StepDimension, DimensionType, StepGeometricTolerance, write_step_with_pmi, write_step_with_attributes};
 pub use xde::{ShapeAttributes, set_shape_color, get_shape_color, set_shape_name, get_shape_name, set_shape_attributes, get_shape_attributes, set_shape_layer, get_shape_layer, set_shape_material, get_shape_material};
 pub use construct::{circle_tangent_to_3, Circle, GeomElement};
-pub use visualization::{Camera, Viewport, Viewer, ViewDirection, ProjectionType};
+pub use visualization::{DisplayMode, DisplayStyle, Viewer, RenderFace, RenderEdge};
 pub use foundation::{Matrix3x3, Matrix4x4, solve_linear_system_3x3, eigenvalues_3x3, VectorOps};
 
 /// Tolerance for geometric comparisons
