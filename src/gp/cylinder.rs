@@ -46,8 +46,8 @@ impl Cylinder {
 
     /// Returns the location.
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -70,12 +70,12 @@ impl Cylinder {
 
     /// Returns the axis.
     #[inline]
-    pub const fn axis(&self) -> Ax1 {
-        self.pos.axis()
+    pub fn axis(&self) -> Ax1 {
+        *self.pos.axis()
     }
 
     /// Sets the axis.
-    pub fn set_axis(&mut self, ax: &Ax1) -> Result<(), String> {
+    pub fn set_axis(&mut self, ax: Ax1) {
         self.pos.set_axis(ax)
     }
 
@@ -88,25 +88,25 @@ impl Cylinder {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Reverses the U parametrization (reverses Y axis).
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.posy_reverse();
+        self.pos.y_reverse();
     }
 
     /// Reverses the V parametrization (reverses Z axis).
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.posz_reverse();
+        self.pos.z_reverse();
     }
 
     /// Rotate the cylinder.

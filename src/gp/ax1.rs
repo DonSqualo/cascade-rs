@@ -127,6 +127,112 @@ impl Ax1 {
             vdir: self.vdir.reversed(),
         }
     }
+
+    /// Mirrors through a point.
+    pub fn mirror_pnt(&mut self, p: &Pnt) {
+        self.loc = self.loc.mirrored_point(p);
+        // Direction reverses when mirroring through a point
+        self.vdir.reverse();
+    }
+
+    /// Returns axis mirrored through a point.
+    pub fn mirrored_pnt(&self, p: &Pnt) -> Ax1 {
+        let mut result = *self;
+        result.mirror_pnt(p);
+        result
+    }
+
+    /// Mirrors through an axis.
+    pub fn mirror_ax1(&mut self, a: &Ax1) {
+        self.loc = self.loc.mirrored_ax1(a);
+        self.vdir = self.vdir.mirrored_ax1(a);
+    }
+
+    /// Returns axis mirrored through an axis.
+    pub fn mirrored_ax1(&self, a: &Ax1) -> Ax1 {
+        let mut result = *self;
+        result.mirror_ax1(a);
+        result
+    }
+
+    /// Mirrors through a plane (Ax2).
+    pub fn mirror_ax2(&mut self, a: &super::Ax2) {
+        self.loc = self.loc.mirrored_ax2(a);
+        self.vdir = self.vdir.mirrored_ax2(a);
+    }
+
+    /// Returns axis mirrored through a plane.
+    pub fn mirrored_ax2(&self, a: &super::Ax2) -> Ax1 {
+        let mut result = *self;
+        result.mirror_ax2(a);
+        result
+    }
+
+    /// Rotates around an axis.
+    pub fn rotate(&mut self, a: &Ax1, angle: f64) {
+        self.loc = self.loc.rotated(a, angle);
+        self.vdir = self.vdir.rotated(a, angle);
+    }
+
+    /// Returns rotated axis.
+    pub fn rotated(&self, a: &Ax1, angle: f64) -> Ax1 {
+        let mut result = *self;
+        result.rotate(a, angle);
+        result
+    }
+
+    /// Scales from a point.
+    pub fn scale(&mut self, p: &Pnt, s: f64) {
+        self.loc = self.loc.scaled(p, s);
+        if s < 0.0 {
+            self.vdir.reverse();
+        }
+    }
+
+    /// Returns scaled axis.
+    pub fn scaled(&self, p: &Pnt, s: f64) -> Ax1 {
+        let mut result = *self;
+        result.scale(p, s);
+        result
+    }
+
+    /// Transforms by a transformation.
+    pub fn transform(&mut self, t: &super::Trsf) {
+        self.loc = self.loc.transformed(t);
+        self.vdir = self.vdir.transformed(t);
+    }
+
+    /// Returns transformed axis.
+    pub fn transformed(&self, t: &super::Trsf) -> Ax1 {
+        let mut result = *self;
+        result.transform(t);
+        result
+    }
+
+    /// Translates by a vector.
+    pub fn translate(&mut self, v: &Vec3) {
+        self.loc = self.loc.translated(v);
+    }
+
+    /// Returns translated axis.
+    pub fn translated(&self, v: &Vec3) -> Ax1 {
+        let mut result = *self;
+        result.translate(v);
+        result
+    }
+
+    /// Translates from point p1 to point p2.
+    pub fn translate_2pts(&mut self, p1: &Pnt, p2: &Pnt) {
+        let v = Vec3::from_points(p1, p2);
+        self.translate(&v);
+    }
+
+    /// Returns axis translated from p1 to p2.
+    pub fn translated_2pts(&self, p1: &Pnt, p2: &Pnt) -> Ax1 {
+        let mut result = *self;
+        result.translate_2pts(p1, p2);
+        result
+    }
 }
 
 #[cfg(test)]

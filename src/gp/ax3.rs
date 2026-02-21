@@ -3,7 +3,7 @@
 //! Port of OCCT's gp_Ax3 class.
 //! Source: src/FoundationClasses/TKMath/gp/gp_Ax3.hxx
 
-use super::{Pnt, Dir, Ax1, Ax2};
+use super::{Pnt, Dir, Ax1, Ax2, Vec3, Trsf};
 
 /// A coordinate system that can be right-handed or left-handed.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -170,10 +170,126 @@ impl Ax3 {
         self.direct = !self.direct;
     }
 
+    /// Reverses Z (main) direction.
+    pub fn z_reverse(&mut self) {
+        self.axis.reverse();
+        self.direct = !self.direct;
+    }
+
     /// Returns reversed.
     pub fn reversed(&self) -> Ax3 {
         let mut result = *self;
         result.reverse();
+        result
+    }
+
+    /// Mirrors through a point.
+    pub fn mirror_pnt(&mut self, p: &Pnt) {
+        self.axis.mirror_pnt(p);
+        self.vxdir.reverse();
+        self.vydir.reverse();
+    }
+
+    /// Returns mirrored through a point.
+    pub fn mirrored_pnt(&self, p: &Pnt) -> Ax3 {
+        let mut result = *self;
+        result.mirror_pnt(p);
+        result
+    }
+
+    /// Mirrors through an axis.
+    pub fn mirror_ax1(&mut self, a: &Ax1) {
+        self.axis.mirror_ax1(a);
+        self.vxdir = self.vxdir.mirrored_ax1(a);
+        self.vydir = self.vydir.mirrored_ax1(a);
+    }
+
+    /// Returns mirrored through an axis.
+    pub fn mirrored_ax1(&self, a: &Ax1) -> Ax3 {
+        let mut result = *self;
+        result.mirror_ax1(a);
+        result
+    }
+
+    /// Mirrors through a plane (Ax2).
+    pub fn mirror_ax2(&mut self, a: &Ax2) {
+        self.axis.mirror_ax2(a);
+        self.vxdir = self.vxdir.mirrored_ax2(a);
+        self.vydir = self.vydir.mirrored_ax2(a);
+    }
+
+    /// Returns mirrored through a plane.
+    pub fn mirrored_ax2(&self, a: &Ax2) -> Ax3 {
+        let mut result = *self;
+        result.mirror_ax2(a);
+        result
+    }
+
+    /// Rotates around an axis.
+    pub fn rotate(&mut self, a: &Ax1, angle: f64) {
+        self.axis.rotate(a, angle);
+        self.vxdir = self.vxdir.rotated(a, angle);
+        self.vydir = self.vydir.rotated(a, angle);
+    }
+
+    /// Returns rotated.
+    pub fn rotated(&self, a: &Ax1, angle: f64) -> Ax3 {
+        let mut result = *self;
+        result.rotate(a, angle);
+        result
+    }
+
+    /// Scales from a point.
+    pub fn scale(&mut self, p: &Pnt, s: f64) {
+        self.axis.scale(p, s);
+        if s < 0.0 {
+            self.vxdir.reverse();
+            self.vydir.reverse();
+        }
+    }
+
+    /// Returns scaled.
+    pub fn scaled(&self, p: &Pnt, s: f64) -> Ax3 {
+        let mut result = *self;
+        result.scale(p, s);
+        result
+    }
+
+    /// Transforms.
+    pub fn transform(&mut self, t: &Trsf) {
+        self.axis.transform(t);
+        self.vxdir = self.vxdir.transformed(t);
+        self.vydir = self.vydir.transformed(t);
+    }
+
+    /// Returns transformed.
+    pub fn transformed(&self, t: &Trsf) -> Ax3 {
+        let mut result = *self;
+        result.transform(t);
+        result
+    }
+
+    /// Translates by a vector.
+    pub fn translate(&mut self, v: &Vec3) {
+        self.axis.translate(v);
+    }
+
+    /// Returns translated.
+    pub fn translated(&self, v: &Vec3) -> Ax3 {
+        let mut result = *self;
+        result.translate(v);
+        result
+    }
+
+    /// Translates from p1 to p2.
+    pub fn translate_2pts(&mut self, p1: &Pnt, p2: &Pnt) {
+        self.axis.translate_2pts(p1, p2);
+    }
+
+    /// Returns translated from p1 to p2.
+    pub fn translated_2pts(&self, p1: &Pnt, p2: &Pnt) -> Ax3 {
+        let mut result = *self;
+        result.translate_2pts(p1, p2);
         result
     }
 

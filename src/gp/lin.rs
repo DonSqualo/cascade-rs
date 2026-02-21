@@ -38,14 +38,14 @@ impl Lin {
 
     /// Returns the direction of the line.
     #[inline]
-    pub const fn direction(&self) -> Dir {
-        self.pos.direction()
+    pub fn direction(&self) -> Dir {
+        *self.pos.direction()
     }
 
     /// Returns the location (origin) point of the line.
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Returns the axis placement (same location and direction).
@@ -152,15 +152,18 @@ impl Lin {
 
     /// Returns a line normal to this line passing through the point.
     /// Raises if the distance is nearly zero (ambiguous case).
-    pub fn normal(&self, p: &Pnt) -> Lin {
+    pub fn normal(&self, p: &Pnt) -> Option<Lin> {
         let loc = self.location();
         let v = Vec3::from_points(&loc, p);
         let dir = self.direction();
 
-        // Normal is perpendicular in the plane defined by the line and point
-        let cross_cross = dir.cross_crossed(&v.normalize(), &dir);
+        // Get direction from point to line
+        let v_dir = Dir::from_xyz(*v.xyz())?;
         
-        Lin::from_pnt_dir(*p, cross_cross)
+        // Normal is perpendicular in the plane defined by the line and point
+        let cross_cross = dir.cross_crossed(&v_dir, &dir)?;
+        
+        Some(Lin::from_pnt_dir(*p, cross_cross))
     }
 
     /// Mirror (reflect) the line through a point (in-place).
@@ -275,7 +278,7 @@ mod tests {
     #[test]
     fn test_lin_from_pnt_dir() {
         let p = Pnt::from_coords(1.0, 2.0, 3.0);
-        let d = Dir::from_xyz(0.0, 0.0, 1.0).unwrap();
+        let d = Dir::from_coords(0.0, 0.0, 1.0).unwrap();
         let lin = Lin::from_pnt_dir(p, d);
         
         assert!((lin.location().x() - 1.0).abs() < 1e-10);
@@ -285,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_lin_direction() {
-        let d = Dir::from_xyz(1.0, 0.0, 0.0).unwrap();
+        let d = Dir::from_coords(1.0, 0.0, 0.0).unwrap();
         let lin = Lin::from_pnt_dir(Pnt::new(), d);
         assert!((lin.direction().x_val() - 1.0).abs() < 1e-10);
     }
@@ -303,7 +306,7 @@ mod tests {
     fn test_lin_distance_to_point() {
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let p = Pnt::from_coords(0.0, 3.0, 4.0);
@@ -317,7 +320,7 @@ mod tests {
     fn test_lin_distance_zero_on_line() {
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(1.0, 2.0, 3.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let p = Pnt::from_coords(5.0, 2.0, 3.0);
@@ -330,11 +333,11 @@ mod tests {
     fn test_lin_angle() {
         let lin1 = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         let lin2 = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 1.0, 0.0).unwrap(),
+            Dir::from_coords(0.0, 1.0, 0.0).unwrap(),
         );
         
         let angle = lin1.angle(&lin2);
@@ -345,7 +348,7 @@ mod tests {
     fn test_lin_contains() {
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let p = Pnt::from_coords(5.0, 0.0, 0.0);
@@ -354,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_lin_reverse() {
-        let d = Dir::from_xyz(1.0, 0.0, 0.0).unwrap();
+        let d = Dir::from_coords(1.0, 0.0, 0.0).unwrap();
         let lin = Lin::from_pnt_dir(Pnt::new(), d);
         
         let mut lin_rev = lin;
@@ -367,7 +370,7 @@ mod tests {
     fn test_lin_translate() {
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(1.0, 2.0, 3.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let v = Vec3::from_coords(1.0, 1.0, 1.0);
@@ -382,11 +385,11 @@ mod tests {
     fn test_lin_parallel_lines_distance() {
         let lin1 = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         let lin2 = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 1.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let dist = lin1.distance_to_line(&lin2);
@@ -398,11 +401,11 @@ mod tests {
         // Two lines that intersect at origin
         let lin1 = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         let lin2 = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 1.0, 0.0).unwrap(),
+            Dir::from_coords(0.0, 1.0, 0.0).unwrap(),
         );
         
         let dist = lin1.distance_to_line(&lin2);
@@ -414,11 +417,11 @@ mod tests {
         // Two skew lines
         let lin1 = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         let lin2 = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 1.0, 1.0),
-            Dir::from_xyz(0.0, 1.0, 0.0).unwrap(),
+            Dir::from_coords(0.0, 1.0, 0.0).unwrap(),
         );
         
         let dist = lin1.distance_to_line(&lin2);
@@ -429,10 +432,10 @@ mod tests {
     fn test_lin_rotated() {
         let lin = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
-        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_xyz(0.0, 0.0, 1.0).unwrap());
+        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_coords(0.0, 0.0, 1.0).unwrap());
         let lin_rot = lin.rotated(&ax, PI / 2.0);
         
         // After 90 degree rotation around Z, X direction becomes Y direction
@@ -444,7 +447,7 @@ mod tests {
     fn test_lin_scaled() {
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(1.0, 0.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let lin_scaled = lin.scaled(&Pnt::new(), 2.0);
@@ -456,11 +459,11 @@ mod tests {
     fn test_lin_normal() {
         let lin = Lin::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
         
         let p = Pnt::from_coords(0.0, 1.0, 0.0);
-        let norm = lin.normal(&p);
+        let norm = lin.normal(&p).unwrap();
         
         // Normal should pass through the point
         assert!(norm.contains(&p, 1e-10));

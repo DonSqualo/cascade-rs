@@ -67,8 +67,8 @@ impl Hypr {
 
     /// Returns the location (center).
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -108,9 +108,9 @@ impl Hypr {
         let loc = self.pos.location();
         let xdir = self.pos.xdirection();
         Pnt::from_coords(
-            loc.x() + c * xdir.x(),
-            loc.y() + c * xdir.y(),
-            loc.z() + c * xdir.z(),
+            loc.x() + c * xdir.x_val(),
+            loc.y() + c * xdir.y_val(),
+            loc.z() + c * xdir.z_val(),
         )
     }
 
@@ -121,20 +121,21 @@ impl Hypr {
         let loc = self.pos.location();
         let xdir = self.pos.xdirection();
         Pnt::from_coords(
-            loc.x() - c * xdir.x(),
-            loc.y() - c * xdir.y(),
-            loc.z() - c * xdir.z(),
+            loc.x() - c * xdir.x_val(),
+            loc.y() - c * xdir.y_val(),
+            loc.z() - c * xdir.z_val(),
         )
     }
 
     /// Returns the conjugate branch 1 (on positive Y side).
     #[inline]
     pub fn conjugate_branch1(&self) -> Hypr {
+        // For conjugate, swap X and Y directions
         Hypr {
-            pos: Ax2::from_pnt_dir(
-                self.pos.location(),
-                self.pos.direction(),
-                self.pos.ydirection(),
+            pos: Ax2::new_with_x(
+                *self.pos.location(),
+                *self.pos.direction(),
+                *self.pos.ydirection(),
             ),
             major_radius: self.minor_radius,
             minor_radius: self.major_radius,
@@ -144,10 +145,9 @@ impl Hypr {
     /// Returns the conjugate branch 2 (on negative Y side).
     #[inline]
     pub fn conjugate_branch2(&self) -> Hypr {
-        let mut ydir = self.pos.ydirection();
-        ydir.reverse();
+        let ydir = self.pos.ydirection().reversed();
         Hypr {
-            pos: Ax2::from_pnt_dir(self.pos.location(), self.pos.direction(), ydir),
+            pos: Ax2::new_with_x(*self.pos.location(), *self.pos.direction(), ydir),
             major_radius: self.minor_radius,
             minor_radius: self.major_radius,
         }
@@ -156,13 +156,13 @@ impl Hypr {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Rotate the hyperbola.

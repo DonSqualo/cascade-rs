@@ -47,8 +47,8 @@ impl Sphere {
 
     /// Returns the location (center).
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -90,25 +90,25 @@ impl Sphere {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Reverses the U parametrization.
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.posy_reverse();
+        self.pos.y_reverse();
     }
 
     /// Reverses the V parametrization.
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.posz_reverse();
+        self.pos.z_reverse();
     }
 
     /// Rotate the sphere.

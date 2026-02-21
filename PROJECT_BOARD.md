@@ -6,167 +6,103 @@
 
 ---
 
-## Active Sub-Agents
+## Current Status
 
-| Agent | Package | Started | Status | Tests |
-|-------|---------|---------|--------|-------|
-| port-gp-3d-geom | Pln,Lin,Circ,Cylinder,etc | 2025-02-21 | 🟡 Structure Complete | WIP API fixes |
-| port-bnd | Bnd_Box,Bnd_Sphere,etc | 10:32 UTC | 🟡 Running | - |
-| port-gp-2d | XY,Pnt2d,Vec2d,etc | 10:32 UTC | 🟡 Running | - |
+**170 gp tests passing** (2D types integrated)
+
+### What's Done
+- precision: Complete (2 tests)
+- gp 3D core: Complete (XYZ, Pnt, Vec, Dir, Mat, Ax1, Ax2, Ax3, Trsf, GTrsf)
+- gp 2D core: Complete (XY, Pnt2d, Vec2d, Dir2d, Mat2d, Ax2d, Ax22d, Trsf2d, Lin2d, Circ2d, Elips2d, Hypr2d, Parab2d)
+
+### What's Written But Needs Integration
+- gp 3D geometry: Pln, Lin, Circ, Elips, Hypr, Parab, Cylinder, Cone, Sphere, Torus
+- bnd package: BndBox, BndBox2d, BndSphere, BndOBB, BndRange (268 tests extracted)
 
 ---
 
-## Layer 0: Foundation (REQUIRED FIRST)
+## Layer 0: Foundation
 
 ### precision ✅ COMPLETE
-- Source: `TKernel/Precision/`
 - Tests: 2/2
-- All constants ported
 
-### gp ✅ CORE COMPLETE (71 tests)
-Remaining types to port:
+### gp - 3D Core ✅ COMPLETE
+| Type | Status | Tests |
+|------|--------|-------|
+| XYZ | ✅ | 28 |
+| Pnt | ✅ | 5 |
+| Vec | ✅ | 4 |
+| Dir | ✅ | 7 |
+| Mat | ✅ | 3 |
+| Ax1 | ✅ | 3 |
+| Ax2 | ✅ | 2 |
+| Ax3 | ✅ | 3 |
+| Trsf | ✅ | 5 |
+| GTrsf | ✅ | 10 |
 
-| Type | Source | Status | Tests |
-|------|--------|--------|-------|
-| XYZ | gp_XYZ.hxx | ✅ | 28 |
-| Pnt | gp_Pnt.hxx | ✅ | 5 |
-| Vec | gp_Vec.hxx | ✅ | 4 |
-| Dir | gp_Dir.hxx | ✅ | 7 |
-| Mat | gp_Mat.hxx | ✅ | 3 |
-| Ax1 | gp_Ax1.hxx | ✅ | 3 |
-| Ax2 | gp_Ax2.hxx | ✅ | 2 |
-| Ax3 | gp_Ax3.hxx | ✅ | 3 |
-| Trsf | gp_Trsf.hxx | ✅ | 5 |
-| Pln | gp_Pln.hxx | 🟡 | 16 |
-| Lin | gp_Lin.hxx | 🟡 | 13 |
-| Circ | gp_Circ.hxx | 🟡 | 11 |
-| Elips | gp_Elips.hxx | 🟡 | 8 |
-| Hypr | gp_Hypr.hxx | 🟡 | 6 |
-| Parab | gp_Parab.hxx | 🟡 | 5 |
-| Cylinder | gp_Cylinder.hxx | 🟡 | 6 |
-| Cone | gp_Cone.hxx | 🟡 | 5 |
-| Sphere | gp_Sphere.hxx | 🟡 | 8 |
-| Torus | gp_Torus.hxx | 🟡 | 6 |
-| GTrsf | gp_GTrsf.hxx | ✅ | 10 |
-| Pnt2d | gp_Pnt2d.hxx | 🔴 | 0 |
-| Vec2d | gp_Vec2d.hxx | 🔴 | 0 |
-| Dir2d | gp_Dir2d.hxx | 🔴 | 0 |
-| Mat2d | gp_Mat2d.hxx | 🔴 | 0 |
-| Trsf2d | gp_Trsf2d.hxx | 🔴 | 0 |
-| Ax2d | gp_Ax2d.hxx | 🔴 | 0 |
-| Ax22d | gp_Ax22d.hxx | 🔴 | 0 |
-| Lin2d | gp_Lin2d.hxx | 🔴 | 0 |
-| Circ2d | gp_Circ2d.hxx | 🔴 | 0 |
-| Elips2d | gp_Elips2d.hxx | 🔴 | 0 |
-| Hypr2d | gp_Hypr2d.hxx | 🔴 | 0 |
-| Parab2d | gp_Parab2d.hxx | 🔴 | 0 |
+### gp - 2D Core ✅ COMPLETE
+| Type | Status | Tests |
+|------|--------|-------|
+| XY | ✅ | 30 |
+| Pnt2d | ✅ | 9 |
+| Vec2d | ✅ | 14 |
+| Dir2d | ✅ | 5 |
+| Mat2d | ✅ | 10 |
+| Ax2d | ✅ | 3 |
+| Ax22d | ✅ | 3 |
+| Trsf2d | ✅ | 5 |
+| Lin2d | ✅ | 5 |
+| Circ2d | ✅ | 5 |
+| Elips2d | ✅ | 4 |
+| Hypr2d | ✅ | 3 |
+| Parab2d | ✅ | 3 |
+
+### gp - 3D Geometry 🟡 CODE EXISTS (needs integration)
+| Type | Status | Notes |
+|------|--------|-------|
+| Pln | 🟡 | API fixes needed |
+| Lin | 🟡 | API fixes needed |
+| Circ | 🟡 | API fixes needed |
+| Elips | 🟡 | API fixes needed |
+| Hypr | 🟡 | API fixes needed |
+| Parab | 🟡 | API fixes needed |
+| Cylinder | 🟡 | API fixes needed |
+| Cone | 🟡 | API fixes needed |
+| Sphere | 🟡 | API fixes needed |
+| Torus | 🟡 | API fixes needed |
 
 ---
 
 ## Layer 1: Math & Bounds
 
-### Bnd (Bounding Boxes)
-- Source: `TKMath/Bnd/`
-- GTests: 268 tests in 8 files
-- Status: 🔴 NOT STARTED
-
-| Class | Lines | Status |
-|-------|-------|--------|
-| Bnd_Box | ~800 | 🔴 |
-| Bnd_Box2d | ~400 | 🔴 |
-| Bnd_Sphere | ~200 | 🔴 |
-| Bnd_OBB | ~600 | 🔴 |
-| Bnd_Range | ~150 | 🔴 |
-| Bnd_B2f/B2d | ~200 | 🔴 |
-| Bnd_B3f/B3d | ~200 | 🔴 |
-
-### math (Numerical Algorithms)
-- Source: `TKMath/math/`
-- ~30,000 lines
-- Status: 🔴 NOT STARTED
-
-### BSplCLib (B-Spline Curves)
-- Source: `TKMath/BSplCLib/`
-- ~15,000 lines
-- Status: 🔴 NOT STARTED
-
-### BSplSLib (B-Spline Surfaces)
-- Source: `TKMath/BSplSLib/`
-- ~10,000 lines
-- Status: 🔴 NOT STARTED
+### Bnd 🟡 CODE EXISTS (needs integration)
+| Class | Status | Notes |
+|-------|--------|-------|
+| BndBox | 🟡 | 59 API errors |
+| BndBox2d | 🟡 | Needs Pnt2d fixes |
+| BndSphere | 🟡 | Needs Pnt fixes |
+| BndOBB | 🟡 | Needs Dir fixes |
+| BndRange | 🟡 | Should be simple |
 
 ---
 
-## Sub-Agent Task Template
+## Next Steps
 
-```
-## Task: Port OCCT package <PACKAGE>
-
-### Setup
-cd /home/heim/projects/cascade-rs
-git checkout -b port/<package>
-
-### Sources
-OCCT: /home/heim/projects/occt-source/src/.../<PACKAGE>/
-GTests: /home/heim/projects/occt-source/src/.../GTests/<PACKAGE>*_Test.cxx
-
-### Method
-1. Read ALL .hxx files - document every method
-2. Read GTests as baseline behavior specs
-3. Create src/<package>/mod.rs
-4. Write Rust tests for EVERY method
-5. Implement until tests pass
-6. Run: cargo test --lib -- <package>
-
-### Output
-Update PROJECT_BOARD.md with:
-- Status change
-- Test count
-- Any Chesterton's Fence notes
-
-### Completion
-git add -A && git commit -m "feat(<package>): Port from OCCT"
-```
+1. **Quick Win:** Integrate BndRange (simple 1D range, minimal deps)
+2. **Then:** Fix BndBox API issues (Pnt constructor, Dir methods)
+3. **Then:** Integrate 3D geometry types (Pln, Lin, etc.)
 
 ---
 
-## Chesterton's Fence Notes
-
-Document anything suspicious that might be intentional:
-
-### gp
-- `Trsf::Transform` special-cases Identity/Translation/Scale/PntMirror - optimization
-- `Resolution()` = DBL_MIN, different from `Confusion()` = 1e-7
-- Geometric types (Lin, Pln, Circ, etc.) share common transformation API:
-  - mirror_pnt, mirror_ax1, mirror_ax2 (symmetry operations)
-  - rotate, scale, transform, translate (affine operations)
-  - All return immutable copies with `_ed` suffix for functional style
-- Direction methods access via .xyz() to get underlying XYZ
-- Ax1/Ax2/Ax3 use `xdirection()`, `ydirection()` (no underscores)
-
-### Port Notes (in progress)
-- Created 10 new modules: lin, pln, circ, elips, hypr, parab, cylinder, cone, sphere, torus
-- Total test stubs written: 84 tests across all 10 types
-- Remaining: API integration fixes (~196 compiler errors due to existing codebase API differences)
-- All methods documented, type signatures complete
-- Major blockers: existing codebase method name variations (need to verify exact APIs)
-
----
-
-## Commands
+## Scripts
 
 ```bash
-# Extract GTests for package
-python3 scripts/extract_tests.py <Package>
+# Run gp tests
+cargo test --lib -- gp
 
-# Run tests for package  
-cargo test --lib -- <package>
+# Check compilation
+cargo check
 
-# Count methods in header
-grep -c "^\s*\(void\|double\|bool\|gp_\)" <file>.hxx
+# Extract tests for a package
+python3 scripts/extract_tests.py <PackageName>
 ```
-
----
-
-*Last updated: 2025-02-21 10:32 UTC*
-*Total tests: 61 (gp) + legacy*

@@ -61,9 +61,9 @@ impl Pln {
         };
 
         let p = Pnt::from_coords(x, y, z);
-        let dir = Dir::from_xyz(nx, ny, nz)?;
-        let ax3 = Ax3::from_dir(dir);
-        let mut ax3 = ax3;
+        let dir = Dir::from_coords(nx, ny, nz)
+            .ok_or_else(|| "Invalid normal direction".to_string())?;
+        let mut ax3 = Ax3::from_dir(dir);
         ax3.set_location(p);
 
         Ok(Self { pos: ax3 })
@@ -74,9 +74,9 @@ impl Pln {
     pub fn coefficients(&self) -> (f64, f64, f64, f64) {
         let dir = self.pos.direction();
         let (a, b, c) = if self.pos.direct() {
-            (dir.x(), dir.y(), dir.z())
+            (dir.x_val(), dir.y_val(), dir.z_val())
         } else {
-            (-dir.x(), -dir.y(), -dir.z())
+            (-dir.x_val(), -dir.y_val(), -dir.z_val())
         };
 
         let p = self.pos.location();
@@ -87,14 +87,14 @@ impl Pln {
 
     /// Returns the plane's normal axis (main direction with location).
     #[inline]
-    pub const fn axis(&self) -> Ax1 {
-        self.pos.axis()
+    pub fn axis(&self) -> Ax1 {
+        *self.pos.axis()
     }
 
     /// Returns the plane's location (origin).
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Returns the local coordinate system of the plane.
@@ -116,20 +116,20 @@ impl Pln {
     }
 
     /// Sets the plane's main axis (normal direction).
-    pub fn set_axis(&mut self, ax: Ax1) -> Result<(), String> {
+    pub fn set_axis(&mut self, ax: Ax1) {
         self.pos.set_axis(ax)
     }
 
     /// Reverses the U parametrization (reverses the X axis).
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.posx_reverse();
+        self.pos.x_reverse();
     }
 
     /// Reverses the V parametrization (reverses the Y axis).
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.posy_reverse();
+        self.pos.y_reverse();
     }
 
     /// Returns true if the axis system is right-handed.
@@ -141,13 +141,13 @@ impl Pln {
     /// Returns the X axis of the plane.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis of the plane.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Computes the distance from the plane to a point.
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn test_pln_from_pnt_dir() {
         let p = Pnt::from_coords(1.0, 2.0, 3.0);
-        let d = Dir::from_xyz(0.0, 0.0, 1.0).unwrap();
+        let d = Dir::from_coords(0.0, 0.0, 1.0).unwrap();
         let pln = Pln::from_pnt_dir(p, d);
 
         assert!((pln.location().x() - 1.0).abs() < 1e-10);
@@ -365,7 +365,7 @@ mod tests {
     fn test_pln_distance_to_point() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let p = Pnt::from_coords(0.0, 0.0, 5.0);
@@ -376,7 +376,7 @@ mod tests {
     fn test_pln_signed_distance() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let p_pos = Pnt::from_coords(0.0, 0.0, 5.0);
@@ -390,7 +390,7 @@ mod tests {
     fn test_pln_coefficients() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let (a, b, c, d) = pln.coefficients();
@@ -412,7 +412,7 @@ mod tests {
     fn test_pln_contains_point() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let p = Pnt::from_coords(5.0, 6.0, 0.0);
@@ -423,12 +423,12 @@ mod tests {
     fn test_pln_contains_line() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(1.0, 2.0, 0.0),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
 
         assert!(pln.contains_line(&lin, precision::CONFUSION, precision::ANGULAR));
@@ -438,7 +438,7 @@ mod tests {
     fn test_pln_translate() {
         let pln = Pln::from_pnt_dir(
             Pnt::from_coords(1.0, 2.0, 3.0),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let v = Vec3::from_coords(1.0, 1.0, 1.0);
@@ -453,11 +453,11 @@ mod tests {
     fn test_pln_parallel_planes_distance() {
         let pln1 = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
         let pln2 = Pln::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 5.0),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         assert!((pln1.distance_to_plane(&pln2) - 5.0).abs() < 1e-10);
@@ -467,12 +467,12 @@ mod tests {
     fn test_pln_distance_to_intersecting_line() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let lin = Lin::from_pnt_dir(
             Pnt::from_coords(0.0, 0.0, 0.0),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         assert!(pln.distance_to_line(&lin) < 1e-10);
@@ -488,10 +488,10 @@ mod tests {
     fn test_pln_rotated() {
         let pln = Pln::from_pnt_dir(
             Pnt::new(),
-            Dir::from_xyz(1.0, 0.0, 0.0).unwrap(),
+            Dir::from_coords(1.0, 0.0, 0.0).unwrap(),
         );
 
-        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_xyz(0.0, 0.0, 1.0).unwrap());
+        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_coords(0.0, 0.0, 1.0).unwrap());
         let pln_rot = pln.rotated(&ax, PI / 2.0);
 
         assert!((pln_rot.position().direction().y_val() - 1.0).abs() < 1e-10);
@@ -501,7 +501,7 @@ mod tests {
     fn test_pln_scaled() {
         let pln = Pln::from_pnt_dir(
             Pnt::from_coords(1.0, 0.0, 0.0),
-            Dir::from_xyz(0.0, 0.0, 1.0).unwrap(),
+            Dir::from_coords(0.0, 0.0, 1.0).unwrap(),
         );
 
         let pln_scaled = pln.scaled(&Pnt::new(), 2.0);
@@ -512,21 +512,21 @@ mod tests {
     #[test]
     fn test_pln_u_reverse() {
         let mut pln = Pln::new();
-        let old_xdir = pln.position().xdirection();
+        let old_xdir = *pln.position().xdirection();
         pln.u_reverse();
-        let new_xdir = pln.position().xdirection();
+        let new_xdir = *pln.position().xdirection();
 
-        assert!((old_xdir.x() + new_xdir.x()).abs() < 1e-10);
+        assert!((old_xdir.x_val() + new_xdir.x_val()).abs() < 1e-10);
     }
 
     #[test]
     fn test_pln_v_reverse() {
         let mut pln = Pln::new();
-        let old_ydir = pln.position().ydirection();
+        let old_ydir = *pln.position().ydirection();
         pln.v_reverse();
-        let new_ydir = pln.position().ydirection();
+        let new_ydir = *pln.position().ydirection();
 
-        assert!((old_ydir.y() + new_ydir.y()).abs() < 1e-10);
+        assert!((old_ydir.y_val() + new_ydir.y_val()).abs() < 1e-10);
     }
 
     #[test]

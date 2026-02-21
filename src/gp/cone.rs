@@ -79,16 +79,16 @@ impl Cone {
         let dir = self.pos.direction();
         let dist = -self.radius / self.semi_angle.tan();
         Pnt::from_coords(
-            loc.x() + dist * dir.x(),
-            loc.y() + dist * dir.y(),
-            loc.z() + dist * dir.z(),
+            loc.x() + dist * dir.x_val(),
+            loc.y() + dist * dir.y_val(),
+            loc.z() + dist * dir.z_val(),
         )
     }
 
     /// Returns the location.
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -111,12 +111,12 @@ impl Cone {
 
     /// Returns the axis.
     #[inline]
-    pub const fn axis(&self) -> Ax1 {
-        self.pos.axis()
+    pub fn axis(&self) -> Ax1 {
+        *self.pos.axis()
     }
 
     /// Sets the axis.
-    pub fn set_axis(&mut self, ax: &Ax1) -> Result<(), String> {
+    pub fn set_axis(&mut self, ax: Ax1) {
         self.pos.set_axis(ax)
     }
 
@@ -129,25 +129,25 @@ impl Cone {
     /// Returns the X axis.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Reverses the U parametrization.
     #[inline]
     pub fn u_reverse(&mut self) {
-        self.posy_reverse();
+        self.pos.y_reverse();
     }
 
     /// Reverses the V parametrization.
     #[inline]
     pub fn v_reverse(&mut self) {
-        self.posz_reverse();
+        self.pos.z_reverse();
         self.semi_angle = -self.semi_angle;
     }
 

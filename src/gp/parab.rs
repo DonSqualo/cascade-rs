@@ -52,8 +52,8 @@ impl Parab {
 
     /// Returns the location (apex).
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -73,22 +73,22 @@ impl Parab {
         let loc = self.pos.location();
         let xdir = self.pos.xdirection();
         Pnt::from_coords(
-            loc.x() + self.focal_length * xdir.x(),
-            loc.y() + self.focal_length * xdir.y(),
-            loc.z() + self.focal_length * xdir.z(),
+            loc.x() + self.focal_length * xdir.x_val(),
+            loc.y() + self.focal_length * xdir.y_val(),
+            loc.z() + self.focal_length * xdir.z_val(),
         )
     }
 
     /// Returns the X axis (symmetry axis).
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis (parallel to directrix).
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Rotate the parabola.

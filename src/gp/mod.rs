@@ -58,6 +58,25 @@ pub use elips2d::Elips2d;
 pub use hypr2d::Hypr2d;
 pub use parab2d::Parab2d;
 
-// Sub-agents created these - integration in progress:
-// 3D: pln, lin, circ, elips, hypr, parab, cylinder, cone, sphere, torus
-// 2D: pnt2d, vec2d, dir2d, mat2d, trsf2d, ax2d, ax22d, lin2d, circ2d, elips2d, hypr2d, parab2d
+// 3D Geometry - integrating
+mod lin;
+mod pln;
+mod circ;
+mod elips;
+mod hypr;
+mod parab;
+mod cylinder;
+mod cone;
+mod sphere;
+mod torus;
+
+pub use lin::Lin;
+pub use pln::Pln;
+pub use circ::Circ;
+pub use elips::Elips;
+pub use hypr::Hypr;
+pub use parab::Parab;
+pub use cylinder::Cylinder;
+pub use cone::Cone;
+pub use sphere::Sphere;
+pub use torus::Torus;

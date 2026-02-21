@@ -146,6 +146,12 @@ impl Dir {
         self.coord.coords()
     }
 
+    /// Converts to Vec3.
+    #[inline]
+    pub fn to_vec(&self) -> crate::gp::Vec3 {
+        crate::gp::Vec3::from_xyz(self.coord.clone())
+    }
+
     /// Returns true if parallel to other within angular tolerance.
     pub fn is_parallel(&self, other: &Dir, angular_tolerance: f64) -> bool {
         let cross = self.coord.crossed(&other.coord);
@@ -194,6 +200,13 @@ impl Dir {
         Dir::from_xyz(cross)
     }
 
+    /// Computes double cross product: self ^ (v1 ^ v2).
+    pub fn cross_crossed(&self, v1: &Dir, v2: &Dir) -> Option<Dir> {
+        let v1_cross_v2 = v1.coord.crossed(&v2.coord);
+        let result = self.coord.crossed(&v1_cross_v2);
+        Dir::from_xyz(result)
+    }
+
     /// Computes dot product.
     #[inline]
     pub fn dot(&self, other: &Dir) -> f64 {
@@ -210,6 +223,42 @@ impl Dir {
     #[inline]
     pub fn reversed(&self) -> Dir {
         Dir { coord: self.coord.reversed() }
+    }
+
+    /// Returns direction mirrored through an axis.
+    pub fn mirrored_ax1(&self, a: &super::Ax1) -> Dir {
+        // Mirror formula: d' = 2(d·n)n - d where n is axis direction
+        let n = a.direction();
+        let dot = self.dot(n);
+        let x = 2.0 * dot * n.x_val() - self.x_val();
+        let y = 2.0 * dot * n.y_val() - self.y_val();
+        let z = 2.0 * dot * n.z_val() - self.z_val();
+        Dir::from_coords(x, y, z).unwrap_or(Dir::z())
+    }
+
+    /// Returns direction mirrored through a plane (Ax2).
+    pub fn mirrored_ax2(&self, a: &super::Ax2) -> Dir {
+        // Mirror through plane: d' = d - 2(d·n)n where n is plane normal
+        let n = a.direction();
+        let dot = self.dot(n);
+        let x = self.x_val() - 2.0 * dot * n.x_val();
+        let y = self.y_val() - 2.0 * dot * n.y_val();
+        let z = self.z_val() - 2.0 * dot * n.z_val();
+        Dir::from_coords(x, y, z).unwrap_or(Dir::z())
+    }
+
+    /// Returns direction rotated around an axis.
+    pub fn rotated(&self, a: &super::Ax1, angle: f64) -> Dir {
+        let mut t = super::Trsf::new();
+        t.set_rotation(a, angle);
+        self.transformed(&t)
+    }
+
+    /// Returns transformed direction.
+    pub fn transformed(&self, t: &super::Trsf) -> Dir {
+        let mut xyz = self.coord.clone();
+        t.transforms_xyz(&mut xyz);
+        Dir::from_xyz(xyz).unwrap_or(Dir::z())
     }
 }
 

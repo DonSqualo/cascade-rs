@@ -68,8 +68,8 @@ impl Elips {
 
     /// Returns the location (center).
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Sets the location.
@@ -115,9 +115,9 @@ impl Elips {
         let loc = self.pos.location();
         let xdir = self.pos.xdirection();
         Pnt::from_coords(
-            loc.x() + c * xdir.x(),
-            loc.y() + c * xdir.y(),
-            loc.z() + c * xdir.z(),
+            loc.x() + c * xdir.x_val(),
+            loc.y() + c * xdir.y_val(),
+            loc.z() + c * xdir.z_val(),
         )
     }
 
@@ -128,9 +128,9 @@ impl Elips {
         let loc = self.pos.location();
         let xdir = self.pos.xdirection();
         Pnt::from_coords(
-            loc.x() - c * xdir.x(),
-            loc.y() - c * xdir.y(),
-            loc.z() - c * xdir.z(),
+            loc.x() - c * xdir.x_val(),
+            loc.y() - c * xdir.y_val(),
+            loc.z() - c * xdir.z_val(),
         )
     }
 
@@ -146,13 +146,13 @@ impl Elips {
     /// Returns the X axis (major axis).
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis (minor axis).
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Rotate the ellipse.

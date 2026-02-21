@@ -37,14 +37,14 @@ impl Circ {
 
     /// Returns the main axis (normal to the plane).
     #[inline]
-    pub const fn axis(&self) -> Ax1 {
-        self.pos.axis()
+    pub fn axis(&self) -> Ax1 {
+        *self.pos.axis()
     }
 
     /// Returns the center of the circle.
     #[inline]
-    pub const fn location(&self) -> Pnt {
-        self.pos.location()
+    pub fn location(&self) -> Pnt {
+        *self.pos.location()
     }
 
     /// Returns the position (coordinate system).
@@ -62,17 +62,17 @@ impl Circ {
     /// Returns the X axis of the circle.
     #[inline]
     pub fn x_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.xdirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.xdirection())
     }
 
     /// Returns the Y axis of the circle.
     #[inline]
     pub fn y_axis(&self) -> Ax1 {
-        Ax1::from_pnt_dir(self.pos.location(), self.pos.ydirection())
+        Ax1::from_pnt_dir(*self.pos.location(), *self.pos.ydirection())
     }
 
     /// Sets the main axis (normal direction).
-    pub fn set_axis(&mut self, ax: &Ax1) -> Result<(), String> {
+    pub fn set_axis(&mut self, ax: Ax1) {
         self.pos.set_axis(ax)
     }
 
@@ -351,7 +351,7 @@ mod tests {
     fn test_circ_rotated() {
         let ax2 = Ax2::standard();
         let circ = Circ::from_ax2_radius(ax2, 5.0);
-        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_xyz(0.0, 0.0, 1.0).unwrap());
+        let ax = Ax1::from_pnt_dir(Pnt::new(), Dir::from_coords(0.0, 0.0, 1.0).unwrap());
         let circ_rot = circ.rotated(&ax, PI / 2.0);
 
         assert!((circ_rot.radius() - 5.0).abs() < 1e-10);
