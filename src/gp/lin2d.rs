@@ -60,8 +60,12 @@ impl Lin2d {
             point.x() - self.origin().x(),
             point.y() - self.origin().y(),
         );
-        let dir = self.direction();
-        let perp = dir.crossed(&v);
+        // Convert direction to Vec2d for cross product
+        let dir_vec = crate::gp::Vec2d::from_coords(
+            self.direction().x(),
+            self.direction().y(),
+        );
+        let perp = dir_vec.crossed(&v);
         perp.abs()
     }
 
@@ -72,8 +76,12 @@ impl Lin2d {
             point.x() - self.origin().x(),
             point.y() - self.origin().y(),
         );
-        let dir = self.direction();
-        v.dot(&dir)
+        // Convert direction to Vec2d for dot product
+        let dir_vec = crate::gp::Vec2d::from_coords(
+            self.direction().x(),
+            self.direction().y(),
+        );
+        v.dot(&dir_vec)
     }
 
     /// Computes the closest point on the line to a given point.
@@ -103,7 +111,7 @@ mod tests {
     fn test_lin2d_new() {
         let line = Lin2d::new();
         assert_eq!(line.origin().x(), 0.0);
-        assert_eq!(line.direction().x_val(), 1.0);
+        assert_eq!(line.direction().x(), 1.0);
     }
 
     #[test]
@@ -112,7 +120,7 @@ mod tests {
         let p2 = Pnt2d::from_coords(3.0, 4.0);
         let line = Lin2d::from_two_points(p1, p2);
         assert_eq!(line.origin().x(), 0.0);
-        assert!((line.direction().x_val() - 0.6).abs() < 1e-10);
+        assert!((line.direction().x() - 0.6).abs() < 1e-10);
     }
 
     #[test]

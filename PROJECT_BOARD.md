@@ -23,7 +23,7 @@
 - Tests: 2/2
 - All constants ported
 
-### gp ✅ CORE COMPLETE (61 tests)
+### gp ✅ CORE COMPLETE (71 tests)
 Remaining types to port:
 
 | Type | Source | Status | Tests |
@@ -47,7 +47,7 @@ Remaining types to port:
 | Cone | gp_Cone.hxx | 🟡 | 5 |
 | Sphere | gp_Sphere.hxx | 🟡 | 8 |
 | Torus | gp_Torus.hxx | 🟡 | 6 |
-| GTrsf | gp_GTrsf.hxx | 🔴 | 0 |
+| GTrsf | gp_GTrsf.hxx | ✅ | 10 |
 | Pnt2d | gp_Pnt2d.hxx | 🔴 | 0 |
 | Vec2d | gp_Vec2d.hxx | 🔴 | 0 |
 | Dir2d | gp_Dir2d.hxx | 🔴 | 0 |

@@ -91,8 +91,8 @@ mod tests {
     #[test]
     fn test_ax22d_new() {
         let ax = Ax22d::new();
-        assert_eq!(ax.x_direction().x_val(), 1.0);
-        assert_eq!(ax.y_direction().y_val(), 1.0);
+        assert_eq!(ax.x_direction().x(), 1.0);
+        assert_eq!(ax.y_direction().y(), 1.0);
     }
 
     #[test]

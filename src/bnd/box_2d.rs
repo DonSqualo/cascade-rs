@@ -115,7 +115,7 @@ impl BndBox2d {
             self.xmin - self.gap
         };
         let xmax = if self.is_open_xmax() {
-            f64::INFINITY
+            f64::f64::INFINITY
         } else {
             self.xmax + self.gap
         };
@@ -125,7 +125,7 @@ impl BndBox2d {
             self.ymin - self.gap
         };
         let ymax = if self.is_open_ymax() {
-            f64::INFINITY
+            f64::f64::INFINITY
         } else {
             self.ymax + self.gap
         };

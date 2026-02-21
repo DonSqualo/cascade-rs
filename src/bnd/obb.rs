@@ -93,16 +93,16 @@ impl BndOBB {
     pub fn add_point(&mut self, p: Pnt) {
         // Transform point to local coordinates
         let v = XYZ::new(
-            p.x() - self.center.x(),
-            p.y() - self.center.y(),
-            p.z() - self.center.z(),
+            p.x_val() - self.center.x_val(),
+            p.y_val() - self.center.y_val(),
+            p.z_val() - self.center.z_val(),
         );
         
         // Project onto each axis
         for i in 0..3 {
-            let proj = (v.x() * self.axes[i].x() + 
-                       v.y() * self.axes[i].y() + 
-                       v.z() * self.axes[i].z()).abs();
+            let proj = (v.x_val() * self.axes[i].x_val() + 
+                       v.y_val() * self.axes[i].y_val() + 
+                       v.z_val() * self.axes[i].z_val()).abs();
             self.h_dims[i] = self.h_dims[i].max(proj);
         }
     }
@@ -110,15 +110,15 @@ impl BndOBB {
     /// Checks if a point is contained in this OBB
     pub fn contains(&self, p: Pnt) -> bool {
         let v = XYZ::new(
-            p.x() - self.center.x(),
-            p.y() - self.center.y(),
-            p.z() - self.center.z(),
+            p.x_val() - self.center.x_val(),
+            p.y_val() - self.center.y_val(),
+            p.z_val() - self.center.z_val(),
         );
         
         for i in 0..3 {
-            let proj = v.x() * self.axes[i].x() + 
-                      v.y() * self.axes[i].y() + 
-                      v.z() * self.axes[i].z();
+            let proj = v.x_val() * self.axes[i].x_val() + 
+                      v.y_val() * self.axes[i].y_val() + 
+                      v.z_val() * self.axes[i].z_val();
             if proj.abs() > self.h_dims[i] {
                 return false;
             }
@@ -129,9 +129,9 @@ impl BndOBB {
     /// Checks if another OBB intersects this OBB (using SAT - Separating Axis Theorem)
     pub fn intersects(&self, other: &BndOBB) -> bool {
         // Simple AABB check for now (not full OBB-OBB)
-        let cx_diff = (self.center.x() - other.center.x()).abs();
-        let cy_diff = (self.center.y() - other.center.y()).abs();
-        let cz_diff = (self.center.z() - other.center.z()).abs();
+        let cx_diff = (self.center.x_val() - other.center.x_val()).abs();
+        let cy_diff = (self.center.y_val() - other.center.y_val()).abs();
+        let cz_diff = (self.center.z_val() - other.center.z_val()).abs();
         
         let hx = self.h_dims[0] + other.h_dims[0];
         let hy = self.h_dims[1] + other.h_dims[1];

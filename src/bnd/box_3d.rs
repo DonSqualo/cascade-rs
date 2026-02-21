@@ -146,32 +146,32 @@ impl BndBox {
     /// Returns the bounds including gap: (xmin, ymin, zmin, xmax, ymax, zmax)
     pub fn get(&self) -> (f64, f64, f64, f64, f64, f64) {
         let xmin = if self.is_open_xmin() {
-            INFINITY * -1.0
+            f64::INFINITY * -1.0
         } else {
             self.xmin - self.gap
         };
         let xmax = if self.is_open_xmax() {
-            INFINITY
+            f64::INFINITY
         } else {
             self.xmax + self.gap
         };
         let ymin = if self.is_open_ymin() {
-            INFINITY * -1.0
+            f64::INFINITY * -1.0
         } else {
             self.ymin - self.gap
         };
         let ymax = if self.is_open_ymax() {
-            INFINITY
+            f64::INFINITY
         } else {
             self.ymax + self.gap
         };
         let zmin = if self.is_open_zmin() {
-            INFINITY * -1.0
+            f64::INFINITY * -1.0
         } else {
             self.zmin - self.gap
         };
         let zmax = if self.is_open_zmax() {
-            INFINITY
+            f64::INFINITY
         } else {
             self.zmax + self.gap
         };
@@ -181,13 +181,13 @@ impl BndBox {
     /// Returns the minimum corner
     pub fn corner_min(&self) -> Pnt {
         let (xmin, ymin, zmin, _, _, _) = self.get();
-        Pnt::new(xmin, ymin, zmin)
+        Pnt::from_coords(xmin, ymin, zmin)
     }
 
     /// Returns the maximum corner
     pub fn corner_max(&self) -> Pnt {
         let (_, _, _, xmax, ymax, zmax) = self.get();
-        Pnt::new(xmax, ymax, zmax)
+        Pnt::from_coords(xmax, ymax, zmax)
     }
 
     /// Returns the center of this box, or None if void
@@ -196,7 +196,7 @@ impl BndBox {
             None
         } else {
             let (xmin, ymin, zmin, xmax, ymax, zmax) = self.get();
-            Some(Pnt::new(
+            Some(Pnt::from_coords(
                 (xmin + xmax) / 2.0,
                 (ymin + ymax) / 2.0,
                 (zmin + zmax) / 2.0,
@@ -403,9 +403,9 @@ impl BndBox {
 
     /// Adds a direction to this box
     pub fn add_direction(&mut self, d: Dir) {
-        let x = d.x();
-        let y = d.y();
-        let z = d.z();
+        let x = d.x_val();
+        let y = d.y_val();
+        let z = d.z_val();
         if x > 0.0 {
             self.open_xmax();
         } else if x < 0.0 {
@@ -432,14 +432,14 @@ impl BndBox {
         // Transform all 8 corners
         let (xmin, ymin, zmin, xmax, ymax, zmax) = self.get();
         let corners = [
-            Pnt::new(xmin, ymin, zmin),
-            Pnt::new(xmax, ymin, zmin),
-            Pnt::new(xmin, ymax, zmin),
-            Pnt::new(xmin, ymin, zmax),
-            Pnt::new(xmax, ymax, zmin),
-            Pnt::new(xmax, ymin, zmax),
-            Pnt::new(xmin, ymax, zmax),
-            Pnt::new(xmax, ymax, zmax),
+            Pnt::from_coords(xmin, ymin, zmin),
+            Pnt::from_coords(xmax, ymin, zmin),
+            Pnt::from_coords(xmin, ymax, zmin),
+            Pnt::from_coords(xmin, ymin, zmax),
+            Pnt::from_coords(xmax, ymax, zmin),
+            Pnt::from_coords(xmax, ymin, zmax),
+            Pnt::from_coords(xmin, ymax, zmax),
+            Pnt::from_coords(xmax, ymax, zmax),
         ];
         
         let mut result = BndBox::new();
@@ -479,8 +479,8 @@ mod tests {
 
     #[test]
     fn test_from_points() {
-        let p_min = Pnt::new(1.0, 2.0, 3.0);
-        let p_max = Pnt::new(4.0, 5.0, 6.0);
+        let p_min = Pnt::from_coords(1.0, 2.0, 3.0);
+        let p_max = Pnt::from_coords(4.0, 5.0, 6.0);
         let b = BndBox::from_points(p_min, p_max);
         assert!(!b.is_void());
         let (xmin, ymin, zmin, xmax, ymax, zmax) = b.get();

@@ -39,7 +39,8 @@ impl Mat2d {
     pub fn from_rotation(angle: f64) -> Self {
         let cos = angle.cos();
         let sin = angle.sin();
-        Self { mat: [[cos, sin], [-sin, cos]] }
+        // [[cos, -sin], [sin, cos]] (row-major storage)
+        Self { mat: [[cos, -sin], [sin, cos]] }
     }
 
     /// Creates a scaling matrix.
@@ -336,9 +337,11 @@ impl Mat2d {
     #[inline]
     pub fn multiply_xy(&self, xy: XY) -> XY {
         let (x, y) = xy.coords();
+        // Matrix-vector multiplication: [row0 · v, row1 · v]
+        // mat[0] is row 0, mat[1] is row 1
         XY::from_coords(
-            self.mat[0][0] * x + self.mat[1][0] * y,
-            self.mat[0][1] * x + self.mat[1][1] * y,
+            self.mat[0][0] * x + self.mat[0][1] * y,
+            self.mat[1][0] * x + self.mat[1][1] * y,
         )
     }
 }
@@ -463,9 +466,15 @@ mod tests {
         let mat = Mat2d::from_rotation(angle);
         let cos45 = angle.cos();
         let sin45 = angle.sin();
+        // Storage: [[cos, -sin], [sin, cos]]
+        // With value(r,c) = mat[c-1][r-1]:
+        // value(1,1) = mat[0][0] = cos
+        // value(1,2) = mat[1][0] = sin
+        // value(2,1) = mat[0][1] = -sin
+        // value(2,2) = mat[1][1] = cos
         assert!((mat.value(1, 1) - cos45).abs() < 1e-10);
-        assert!((mat.value(1, 2) - sin45).abs() < 1e-10);
-        assert!((mat.value(2, 1) + sin45).abs() < 1e-10);
+        assert!((mat.value(1, 2) - sin45).abs() < 1e-10);  // +sin
+        assert!((mat.value(2, 1) + sin45).abs() < 1e-10);  // -sin
         assert!((mat.value(2, 2) - cos45).abs() < 1e-10);
     }
 
