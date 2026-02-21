@@ -19,6 +19,14 @@ pub mod gp;
 /// Port of: src/FoundationClasses/TKMath/Bnd/
 pub mod bnd;
 
+/// Elementary Curve Library - parametric curve utilities.
+/// Port of: src/FoundationClasses/TKMath/ElCLib/
+// pub mod elclib; // WIP - needs API fixes
+
+/// Topological location (composite transformations).
+/// Port of: src/FoundationClasses/TKMath/TopLoc/
+pub mod toploc;
+
 // =============================================================================
 // Legacy Modules (to be migrated)
 // =============================================================================
